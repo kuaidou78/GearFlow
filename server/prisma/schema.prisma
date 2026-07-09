@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String         @id @default(cuid())
+  name         String
+  email        String         @unique
+  passwordHash String
+  role         String         @default("user")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  bikes        Bike[]
+  rides        Ride[]
+  gears        Gear[]
+  maintenance  Maintenance[]
+  wishlist     WishlistItem[]
+}
+
+model Bike {
+  id           String    @id @default(cuid())
+  userId       String
+  name         String
+  brand        String
+  model        String?
+  bikeType     String
+  purchaseDate DateTime?
+  notes        String?   @db.Text
+  isArchived   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rides        Ride[]
+  gears        Gear[]
+
+  @@index([userId])
+}
+
+model Ride {
+  id          String   @id @default(cuid())
+  userId      String
+  bikeId      String?
+  title       String
+  rideDate    DateTime
+  distanceKm  Decimal  @db.Decimal(8, 2)
+  durationMin Int
+  elevationM  Int      @default(0)
+  route       String?
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bike        Bike?    @relation(fields: [bikeId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([bikeId])
+  @@index([rideDate])
+}
+
+model Gear {
+  id                     String        @id @default(cuid())
+  userId                 String
+  bikeId                 String?
+  name                   String
+  category               String
+  brand                  String
+  model                  String?
+  purchasePrice          Decimal       @db.Decimal(10, 2)
+  purchaseDate           DateTime
+  expectedLifespanMonths Int
+  condition              String
+  minResidualRate        Decimal       @db.Decimal(4, 2)
+  notes                  String?       @db.Text
+  isArchived             Boolean       @default(false)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bike                   Bike?         @relation(fields: [bikeId], references: [id], onDelete: SetNull)
+  maintenance            Maintenance[]
+
+  @@index([userId])
+  @@index([bikeId])
+}
+
+model Maintenance {
+  id              String    @id @default(cuid())
+  userId          String
+  gearId          String
+  type            String
+  title           String
+  maintenanceDate DateTime
+  cost            Decimal   @db.Decimal(10, 2)
+  nextDueDate     DateTime?
+  notes           String?   @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gear            Gear      @relation(fields: [gearId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([gearId])
+}
+
+model WishlistItem {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  category       String
+  brand          String?
+  estimatedPrice Decimal  @db.Decimal(10, 2)
+  priority       String
+  plannedMonth   String?
+  status         String
+  reason         String?  @db.Text
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
