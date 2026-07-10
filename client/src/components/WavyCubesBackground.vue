@@ -226,6 +226,12 @@ function handleVisibilityChange() {
   else stopRendering();
 }
 
+function handleContextLost(event: Event) {
+  event.preventDefault();
+  failed.value = true;
+  dispose();
+}
+
 function initialize() {
   if (!rootEl.value) return;
   try {
@@ -233,6 +239,7 @@ function initialize() {
     renderer.setClearColor(COLORS.sceneBackground, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.domElement.setAttribute('aria-hidden', 'true');
+    renderer.domElement.addEventListener('webglcontextlost', handleContextLost, false);
     rootEl.value.appendChild(renderer.domElement);
     scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(COLORS.sceneBackground, 0.045);
@@ -266,6 +273,7 @@ function dispose() {
   window.removeEventListener('blur', handlePointerLeave);
   window.removeEventListener('resize', resize);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
+  renderer?.domElement.removeEventListener('webglcontextlost', handleContextLost);
   disposeGrid();
   renderer?.dispose();
   renderer?.forceContextLoss();

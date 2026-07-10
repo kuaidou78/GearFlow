@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { get, post, put, remove } from './api';
 import RidePlannerPage from './components/RidePlannerPage.vue';
+import WavyCubesBackground from './components/WavyCubesBackground.vue';
 
 const dashboardHeroUrl = new URL('./assets/raw/my-merida-dashboard-original.jpeg', import.meta.url).href;
 const sculturaGarageUrl = new URL('./assets/raw/scultura-garage-original.jpg', import.meta.url).href;
@@ -791,6 +792,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <WavyCubesBackground />
   <main v-if="!user" class="auth-screen">
     <section class="auth-panel">
       <div class="auth-intro">
