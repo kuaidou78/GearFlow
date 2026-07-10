@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import * as THREE from 'three';
 
 const rootEl = ref<HTMLElement | null>(null);
 const ready = ref(false);
@@ -20,6 +19,7 @@ const COLORS = {
 type TrailPoint = { x: number; z: number; age: number; strength: number };
 
 let renderer: any = null;
+let THREE: any = null;
 let scene: any = null;
 let camera: any = null;
 let grid: any = null;
@@ -37,16 +37,16 @@ let gridRows = 0;
 let gridWidth = 0;
 let gridDepth = 0;
 
-const dummy = new THREE.Object3D();
-const raycaster = new THREE.Raycaster();
-const pointerNdc = new THREE.Vector2();
-const pointerWorld = new THREE.Vector3();
-const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-const baseColor = new THREE.Color(COLORS.cubeBase);
-const midColor = new THREE.Color(COLORS.waveMid);
-const highlightColor = new THREE.Color(COLORS.waveHighlight);
-const specularColor = new THREE.Color(COLORS.peakSpecular);
-const mixedColor = new THREE.Color();
+let dummy: any;
+let raycaster: any;
+let pointerNdc: any;
+let pointerWorld: any;
+let groundPlane: any;
+let baseColor: any;
+let midColor: any;
+let highlightColor: any;
+let specularColor: any;
+let mixedColor: any;
 
 function viewportGrid() {
   if (window.innerWidth < 768) return { columns: 20, rows: 13, dynamic: false, maxHeight: 0.22 };
@@ -232,9 +232,20 @@ function handleContextLost(event: Event) {
   dispose();
 }
 
-function initialize() {
+async function initialize() {
   if (!rootEl.value) return;
   try {
+    THREE = await import('three');
+    dummy = new THREE.Object3D();
+    raycaster = new THREE.Raycaster();
+    pointerNdc = new THREE.Vector2();
+    pointerWorld = new THREE.Vector3();
+    groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    baseColor = new THREE.Color(COLORS.cubeBase);
+    midColor = new THREE.Color(COLORS.waveMid);
+    highlightColor = new THREE.Color(COLORS.waveHighlight);
+    specularColor = new THREE.Color(COLORS.peakSpecular);
+    mixedColor = new THREE.Color();
     renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false, powerPreference: 'low-power' });
     renderer.setClearColor(COLORS.sceneBackground, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -284,7 +295,7 @@ function dispose() {
   trail = [];
 }
 
-onMounted(initialize);
+onMounted(() => { void initialize(); });
 onBeforeUnmount(dispose);
 </script>
 
