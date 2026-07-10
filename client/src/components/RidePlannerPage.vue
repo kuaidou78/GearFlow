@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { get, post } from '../api';
+import RideRouteStory from './RideRouteStory.vue';
 
 type Place = { id: string; label: string; name: string | null; locality: string | null; region: string | null; country: string | null; latitude: number; longitude: number; source: 'openrouteservice' };
 type PlaceSearchResponse = { query: string; places: Place[]; attribution: string };
 type RideType = 'recovery' | 'casual' | 'endurance' | 'climbing';
 type PlanResponse = {
-  request: { departureTime: string; rideType: RideType };
-  route: { profile: string; distanceKm: number; durationMinutes: number; elevationGainM: number | null; elevationLossM: number | null; geometry: { type: 'LineString'; coordinates: number[][] } };
+  request: { start: { latitude: number; longitude: number }; end: { latitude: number; longitude: number }; departureTime: string; rideType: RideType };
+  route: { profile: string; distanceKm: number; durationMinutes: number; elevationGainM: number | null; elevationLossM: number | null; geometry: { type: 'LineString'; coordinates: ([number, number] | [number, number, number])[] }; bbox: number[] | null };
   weather: { forecastTime: string; sampleLocation: { strategy: string }; temperatureC: number; apparentTemperatureC: number; rainProbability: number; precipitationMm: number; windSpeedKph: number; windGustKph: number };
   recommendation: { score: number; level: 'recommended' | 'suitable' | 'caution' | 'not_recommended'; reasons: string[]; warnings: string[]; factors: { code: string; impact: number; message: string }[] };
   sources: { route: string; weather: string };
@@ -254,5 +255,6 @@ onBeforeUnmount(() => {
         </template>
       </section>
     </div>
+    <RideRouteStory v-if="plan" :plan="plan" :start-label="fields.start.selected?.label || '起点'" :end-label="fields.end.selected?.label || '终点'" />
   </section>
 </template>
