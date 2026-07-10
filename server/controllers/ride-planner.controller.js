@@ -1,5 +1,6 @@
 import { evaluateRideRecommendation } from '../services/ride-recommendation.service.js';
 import { planRide } from '../services/ride-plan.service.js';
+import { searchPlaces } from '../services/geocoding.service.js';
 import { fetchRoadCyclingRoute, ROAD_CYCLING_PROFILE } from '../services/route.service.js';
 import { fetchHourlyWeather } from '../services/weather.service.js';
 import { createError, sendData } from '../utils/response.js';
@@ -24,6 +25,43 @@ function validateCoordinatePoint(point, field) {
 
 function finiteNumber(value, field) {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw createError(400, 'VALIDATION_ERROR', `${field} must be a finite number.`);
+}
+
+function querySingleValue(value, field) {
+  if (typeof value !== 'string') throw createError(400, 'VALIDATION_ERROR', `${field} must be a single query value.`);
+  return value;
+}
+
+export function validatePlaceSearchQuery(query) {
+  if (!query || typeof query !== 'object' || Array.isArray(query)) throw createError(400, 'VALIDATION_ERROR', 'Query parameters are invalid.');
+  for (const key of Object.keys(query)) {
+    if (!['q', 'limit', 'focusLatitude', 'focusLongitude'].includes(key)) throw createError(400, 'VALIDATION_ERROR', `${key} is not supported.`);
+  }
+  const q = querySingleValue(query.q, 'q').trim();
+  if (q.length < 2 || q.length > 120) throw createError(400, 'VALIDATION_ERROR', 'q must contain between 2 and 120 characters.');
+
+  let limit = 5;
+  if (query.limit !== undefined) {
+    const rawLimit = querySingleValue(query.limit, 'limit');
+    if (!/^\d+$/.test(rawLimit)) throw createError(400, 'VALIDATION_ERROR', 'limit must be an integer between 1 and 8.');
+    limit = Number(rawLimit);
+    if (limit < 1 || limit > 8) throw createError(400, 'VALIDATION_ERROR', 'limit must be between 1 and 8.');
+  }
+
+  const hasFocusLatitude = query.focusLatitude !== undefined;
+  const hasFocusLongitude = query.focusLongitude !== undefined;
+  if (hasFocusLatitude !== hasFocusLongitude) throw createError(400, 'VALIDATION_ERROR', 'focusLatitude and focusLongitude must be provided together.');
+  let focus = null;
+  if (hasFocusLatitude) {
+    const rawLatitude = querySingleValue(query.focusLatitude, 'focusLatitude');
+    const rawLongitude = querySingleValue(query.focusLongitude, 'focusLongitude');
+    if (!/^[-+]?\d+(\.\d+)?$/.test(rawLatitude) || !/^[-+]?\d+(\.\d+)?$/.test(rawLongitude)) throw createError(400, 'VALIDATION_ERROR', 'Focus coordinates must be finite numbers.');
+    const latitude = Number(rawLatitude);
+    const longitude = Number(rawLongitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) throw createError(400, 'VALIDATION_ERROR', 'Focus coordinates are outside supported ranges.');
+    focus = { latitude, longitude };
+  }
+  return { query: q, limit, focus };
 }
 
 export function validateWeatherAssessmentInput(body) {
@@ -126,3 +164,17 @@ export function createRidePlanController({ createPlan = planRide } = {}) {
 }
 
 export const integratedRidePlan = createRidePlanController();
+
+export function createPlaceSearchController({ findPlaces = searchPlaces } = {}) {
+  return async function placeSearch(req, res, next) {
+    try {
+      const input = validatePlaceSearchQuery(req.query);
+      const result = await findPlaces(input);
+      return sendData(res, { query: input.query, places: result.places, attribution: result.attribution });
+    } catch (error) {
+      return next(error);
+    }
+  };
+}
+
+export const placeSearch = createPlaceSearchController();
