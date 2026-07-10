@@ -20,12 +20,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<ApiE
   return payload;
 }
 
-export function get<T>(path: string) {
-  return request<T>(path);
+export function get<T>(path: string, options: RequestInit = {}) {
+  return request<T>(path, options);
 }
 
-export function post<T>(path: string, body?: unknown) {
-  return request<T>(path, { method: 'POST', body: JSON.stringify(body || {}) });
+export function post<T>(path: string, body?: unknown, options: RequestInit = {}) {
+  return request<T>(path, { ...options, method: 'POST', body: JSON.stringify(body || {}) });
 }
 
 export function put<T>(path: string, body?: unknown) {

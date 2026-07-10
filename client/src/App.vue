@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { get, post, put, remove } from './api';
+import RidePlannerPage from './components/RidePlannerPage.vue';
 
 const dashboardHeroUrl = new URL('./assets/raw/my-merida-dashboard-original.jpeg', import.meta.url).href;
 const sculturaGarageUrl = new URL('./assets/raw/scultura-garage-original.jpg', import.meta.url).href;
 const reactoRidesUrl = new URL('./assets/raw/reacto-rides-original.jpg', import.meta.url).href;
 const gearHeroUrl = new URL('./assets/raw/gear-dura-ace-brake-original.jpg', import.meta.url).href;
 
-type View = 'dashboard' | 'rides' | 'bikes' | 'gears' | 'maintenance' | 'insights';
+type View = 'dashboard' | 'rides' | 'ride-planner' | 'bikes' | 'gears' | 'maintenance' | 'insights';
 type ViewDirection = 'initial' | 'forward' | 'backward';
 
 type User = { id: string; name: string; email: string; role: string };
@@ -22,6 +23,7 @@ type PageCopy = { title: string; description: string; action: string };
 const views: { key: View; label: string }[] = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'rides', label: 'Rides' },
+  { key: 'ride-planner', label: 'Ride Planner' },
   { key: 'bikes', label: 'Bikes' },
   { key: 'gears', label: 'Gear' },
   { key: 'maintenance', label: 'Maintenance' },
@@ -38,6 +40,11 @@ const pageCopy: Record<View, PageCopy> = {
     title: 'Ride performance',
     description: 'A focused record of distance, duration, route context, and the machine behind each session.',
     action: 'New ride'
+  },
+  'ride-planner': {
+    title: 'Ride planner',
+    description: 'Build a weather-aware route brief from verified places and a real road-cycling route.',
+    action: 'Generate plan'
   },
   bikes: {
     title: 'My Garage',
@@ -852,7 +859,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="header-actions">
               <button type="button" class="ghost" @click="loadWorkspace">Refresh</button>
-              <button type="button" class="primary" @click="handlePrimaryAction">{{ activePage.action }}</button>
+              <button v-if="currentView !== 'ride-planner'" type="button" class="primary" @click="handlePrimaryAction">{{ activePage.action }}</button>
             </div>
           </header>
 
@@ -954,6 +961,8 @@ onBeforeUnmount(() => {
               </article>
             </section>
           </section>
+
+          <RidePlannerPage v-if="currentView === 'ride-planner'" />
 
           <section v-if="currentView === 'bikes'" class="entity-page">
             <article class="garage-hero-panel">
