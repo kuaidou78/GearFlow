@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { weatherAssessment } from '../controllers/ride-planner.controller.js';
+import { routePreview, weatherAssessment } from '../controllers/ride-planner.controller.js';
 
 export const ridePlannerRoutes = Router();
 
 ridePlannerRoutes.post('/weather-assessment', weatherAssessment);
+ridePlannerRoutes.post('/route-preview', routePreview);
