@@ -1,5 +1,6 @@
 import { CONDITIONS, GEAR_CATEGORIES } from '../config/constants.js';
 import { withValuation } from '../services/depreciation.service.js';
+import { estimateWithLocalRules } from '../services/valuation/local-rule.provider.js';
 import { prisma } from '../utils/prisma.js';
 import { createError, sendData } from '../utils/response.js';
 
@@ -27,6 +28,28 @@ function gearData(body) {
   if (body.minResidualRate !== undefined) data.minResidualRate = Number(body.minResidualRate);
   if (body.isArchived !== undefined) data.isArchived = Boolean(body.isArchived);
   return data;
+}
+
+const PREVIEW_OVERRIDE_FIELDS = ['purchasePrice', 'purchaseDate', 'condition', 'expectedLifespanMonths', 'minResidualRate'];
+
+function validatePreviewOverrides(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw createError(400, 'VALIDATION_ERROR', 'Preview input must be an object.');
+  for (const field of Object.keys(body)) {
+    if (!PREVIEW_OVERRIDE_FIELDS.includes(field)) throw createError(400, 'VALIDATION_ERROR', `Unsupported preview field: ${field}.`);
+  }
+}
+
+function validatePreviewInput(gear) {
+  const purchasePrice = Number(gear.purchasePrice);
+  const expectedLifespanMonths = Number(gear.expectedLifespanMonths);
+  const minResidualRate = Number(gear.minResidualRate);
+  const purchaseDate = new Date(gear.purchaseDate);
+
+  if (!Number.isFinite(purchasePrice) || purchasePrice <= 0) throw createError(400, 'VALIDATION_ERROR', 'Purchase price must be greater than zero.');
+  if (Number.isNaN(purchaseDate.getTime()) || purchaseDate > new Date()) throw createError(400, 'VALIDATION_ERROR', 'Purchase date must be valid and not in the future.');
+  if (!CONDITIONS.includes(gear.condition)) throw createError(400, 'VALIDATION_ERROR', 'Invalid condition.');
+  if (!Number.isInteger(expectedLifespanMonths) || expectedLifespanMonths <= 0) throw createError(400, 'VALIDATION_ERROR', 'Expected lifespan must be a positive whole number.');
+  if (!Number.isFinite(minResidualRate) || minResidualRate < 0 || minResidualRate > 1) throw createError(400, 'VALIDATION_ERROR', 'Minimum residual rate must be between 0 and 1.');
 }
 
 function whereFromQuery(query) {
@@ -91,6 +114,22 @@ export async function getGear(req, res, next) {
     });
     if (!item) return next(createError(404, 'NOT_FOUND', 'Gear not found.'));
     return sendData(res, withValuation(item));
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function previewGearValuation(req, res, next) {
+  try {
+    validatePreviewOverrides(req.body);
+    const gear = await prisma.gear.findFirst({
+      where: { id: req.params.id, userId: req.user.id, isArchived: false }
+    });
+    if (!gear) return next(createError(404, 'NOT_FOUND', 'Gear not found.'));
+
+    const previewGear = { ...gear, ...req.body };
+    validatePreviewInput(previewGear);
+    return sendData(res, estimateWithLocalRules(previewGear));
   } catch (error) {
     return next(error);
   }
