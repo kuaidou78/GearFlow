@@ -53,6 +53,10 @@ const shortEndurance = evaluate({ distanceKm: 10, elevationGainM: 40, rideType: 
 assert.ok(hasFactor(shortEndurance, 'ENDURANCE_DISTANCE_TOO_SHORT'));
 assert.ok(hasText(shortEndurance.warnings, '耐力训练刺激有限'));
 
+const unknownElevation = evaluate({ distanceKm: 40, elevationGainM: null, rideType: 'climbing' });
+assert.ok(hasFactor(unknownElevation, 'UNKNOWN_ELEVATION'));
+assert.ok(hasText(unknownElevation.warnings, '未提供爬升数据'));
+
 const gustyClimb = evaluate({ distanceKm: 40, elevationGainM: 900, windSpeedKph: 25, windGustKph: 58, rideType: 'climbing' });
 assert.ok(hasFactor(gustyClimb, 'GUSTY_DESCENT_RISK'));
 assert.ok(hasText(gustyClimb.warnings, '放坡稳定性'));

@@ -28,7 +28,8 @@ function assertFiniteNumber(input, field) {
 
 function validateInput(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new TypeError('Ride recommendation input must be an object.');
-  REQUIRED_NUMBER_FIELDS.forEach((field) => assertFiniteNumber(input, field));
+  REQUIRED_NUMBER_FIELDS.filter((field) => field !== 'elevationGainM').forEach((field) => assertFiniteNumber(input, field));
+  if (input.elevationGainM !== null) assertFiniteNumber(input, 'elevationGainM');
   OPTIONAL_NUMBER_FIELDS.forEach((field) => {
     if (input[field] !== undefined && input[field] !== null) assertFiniteNumber(input, field);
   });
@@ -41,7 +42,7 @@ function validateInput(input) {
   if (input.windSpeedKph < 0 || input.windSpeedKph > RECOMMENDATION_THRESHOLDS.windSpeedKph.max) throw new RangeError('windSpeedKph is outside the supported range.');
   if (input.windGustKph !== undefined && input.windGustKph !== null && (input.windGustKph < 0 || input.windGustKph > RECOMMENDATION_THRESHOLDS.windGustKph.max)) throw new RangeError('windGustKph is outside the supported range.');
   if (input.distanceKm < 0 || input.distanceKm > RECOMMENDATION_THRESHOLDS.distanceKm.max) throw new RangeError('distanceKm is outside the supported range.');
-  if (input.elevationGainM < 0 || input.elevationGainM > RECOMMENDATION_THRESHOLDS.elevationGainM.max) throw new RangeError('elevationGainM is outside the supported range.');
+  if (input.elevationGainM !== null && (input.elevationGainM < 0 || input.elevationGainM > RECOMMENDATION_THRESHOLDS.elevationGainM.max)) throw new RangeError('elevationGainM is outside the supported range.');
   if (input.estimatedDurationMinutes !== undefined && input.estimatedDurationMinutes !== null && (input.estimatedDurationMinutes < 0 || input.estimatedDurationMinutes > RECOMMENDATION_THRESHOLDS.durationMinutes.max)) throw new RangeError('estimatedDurationMinutes is outside the supported range.');
 }
 
@@ -108,10 +109,14 @@ function applyTemperatureFactor(state, effectiveTemperature) {
 
 function applyRideTypeFactors(state, input) {
   const { distanceKm, elevationGainM, rideType } = input;
+  const elevationUnknown = elevationGainM === null;
+  if (elevationUnknown) addFactor(state, 'UNKNOWN_ELEVATION', 0, '路线未提供爬升数据，训练针对性与下坡风险未完全评估', 'warning');
   if (rideType === 'recovery') {
     if (distanceKm <= 30) addFactor(state, 'RECOVERY_SHORT_DISTANCE', 5, '短距离符合恢复骑行目标', 'reason');
     else if (distanceKm > 50) addFactor(state, 'RECOVERY_LONG_DISTANCE', -12, '恢复骑行距离偏长，可能增加疲劳', 'warning');
-    if (elevationGainM <= 300) addFactor(state, 'RECOVERY_LOW_ELEVATION', 5, '较低爬升适合恢复节奏', 'reason');
+    if (elevationUnknown) {
+      // Keep the route load unknown rather than treating missing elevation as flat terrain.
+    } else if (elevationGainM <= 300) addFactor(state, 'RECOVERY_LOW_ELEVATION', 5, '较低爬升适合恢复节奏', 'reason');
     else if (elevationGainM > 600) addFactor(state, 'RECOVERY_HIGH_ELEVATION', -32, '高爬升不符合恢复骑行的低负荷目标', 'warning');
     else addFactor(state, 'RECOVERY_MODERATE_ELEVATION', -7, '爬升偏多，恢复骑行应控制强度', 'warning');
   }
@@ -119,7 +124,9 @@ function applyRideTypeFactors(state, input) {
   if (rideType === 'casual') {
     if (distanceKm <= 50) addFactor(state, 'CASUAL_DISTANCE_MATCH', 5, '中短距离适合轻松骑行', 'reason');
     else if (distanceKm > 80) addFactor(state, 'CASUAL_LONG_DISTANCE', -15, '距离偏长，不符合轻松骑行定位', 'warning');
-    if (elevationGainM <= 600) addFactor(state, 'CASUAL_ELEVATION_MATCH', 4, '爬升强度适合轻松骑行', 'reason');
+    if (elevationUnknown) {
+      // The shared unknown-elevation warning is sufficient for this route type.
+    } else if (elevationGainM <= 600) addFactor(state, 'CASUAL_ELEVATION_MATCH', 4, '爬升强度适合轻松骑行', 'reason');
     else if (elevationGainM > 1000) addFactor(state, 'CASUAL_HIGH_ELEVATION', -12, '爬升偏高，建议降低路线强度', 'warning');
   }
 
@@ -130,7 +137,9 @@ function applyRideTypeFactors(state, input) {
   }
 
   if (rideType === 'climbing') {
-    if (elevationGainM >= 700) addFactor(state, 'CLIMBING_ELEVATION_MATCH', 9, '路线爬升符合爬坡训练目标', 'reason');
+    if (elevationUnknown) {
+      // Do not infer climbing specificity when the provider did not report ascent.
+    } else if (elevationGainM >= 700) addFactor(state, 'CLIMBING_ELEVATION_MATCH', 9, '路线爬升符合爬坡训练目标', 'reason');
     else if (elevationGainM >= 400) addFactor(state, 'CLIMBING_MODERATE_ELEVATION', 4, '路线具备一定爬坡训练价值', 'reason');
     else addFactor(state, 'CLIMBING_ELEVATION_TOO_LOW', -10, '爬升偏低，爬坡训练针对性不足', 'warning');
   }
@@ -138,7 +147,7 @@ function applyRideTypeFactors(state, input) {
 
 function applyCombinationFactors(state, input, effectiveTemperature, windRank, rainRank) {
   const isLongDistance = input.distanceKm >= RECOMMENDATION_THRESHOLDS.distanceKm.long;
-  const isHighElevation = input.elevationGainM >= RECOMMENDATION_THRESHOLDS.elevationGainM.high;
+  const isHighElevation = input.elevationGainM !== null && input.elevationGainM >= RECOMMENDATION_THRESHOLDS.elevationGainM.high;
   const isLongDuration = input.estimatedDurationMinutes !== undefined && input.estimatedDurationMinutes >= RECOMMENDATION_THRESHOLDS.durationMinutes.long;
   const isHot = effectiveTemperature >= RECOMMENDATION_THRESHOLDS.temperatureC.warm;
   const isCold = effectiveTemperature < RECOMMENDATION_THRESHOLDS.temperatureC.cold;
