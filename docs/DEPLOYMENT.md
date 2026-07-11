@@ -98,4 +98,3 @@ curl -I http://127.0.0.1/ -H 'Host: 120.26.32.163'
 ```
 
 The complete pre-deployment backup is stored at `/root/gearflow-backups/20260711-213146`. Do not delete the backup, the stopped PM2 entries, the old static directory, or the old application directory during routine rollback.
-
