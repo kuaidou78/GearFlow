@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { gsap } from 'gsap';
 import { get, post, put, remove } from './api';
 import RidePlannerPage from './components/RidePlannerPage.vue';
 import WavyCubesBackground from './components/WavyCubesBackground.vue';
@@ -10,8 +11,6 @@ const reactoRidesUrl = new URL('./assets/raw/reacto-rides-original.jpg', import.
 const gearHeroUrl = new URL('./assets/raw/gear-dura-ace-brake-original.jpg', import.meta.url).href;
 
 type View = 'dashboard' | 'rides' | 'ride-planner' | 'bikes' | 'gears' | 'maintenance' | 'insights';
-type ViewDirection = 'initial' | 'forward' | 'backward';
-
 type User = { id: string; name: string; email: string; role: string };
 type Bike = { id: string; name: string; brand: string; model?: string; bikeType: string; purchaseDate?: string; notes?: string; _count?: { rides: number; gears: number } };
 type Ride = { id: string; title: string; rideDate: string; distanceKm: number; durationMin: number; elevationM: number; route?: string; notes?: string; bikeId?: string; bike?: Pick<Bike, 'id' | 'name'> };
@@ -80,6 +79,7 @@ const gearConditionOptions = [
 const maintenanceTypes = ['cleaning', 'tires', 'chain', 'brakes', 'drivetrain', 'full_service', 'other'];
 
 const currentView = ref<View>('dashboard');
+const navigationView = ref<View>('dashboard');
 const user = ref<User | null>(null);
 const authMode = ref<'login' | 'register'>('login');
 const loading = ref(false);
@@ -101,11 +101,17 @@ const estimatorLoading = ref(false);
 const estimatorError = ref('');
 const estimatorStale = ref(false);
 let estimatorRequestId = 0;
-const transitionDirection = ref<ViewDirection>('initial');
 const isViewTransitioning = ref(false);
 const navRef = ref<HTMLElement | null>(null);
-const navIndicator = reactive({ top: '0px', left: '0px', width: '3px', height: '44px' });
+const pageMotionRef = ref<HTMLElement | null>(null);
+const routeSignalRef = ref<HTMLElement | null>(null);
+const appShellRef = ref<HTMLElement | null>(null);
+const navIndicator = reactive({ x: '0px', y: '0px', scaleX: '1', scaleY: '1' });
 const fontStatus = ref<'checking' | 'instrument' | 'fallback'>('checking');
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+let routeShiftTimeline: gsap.core.Timeline | null = null;
+let routeShiftContext: gsap.Context | null = null;
+let routeShiftToken = 0;
 
 const authForm = reactive({ name: '', email: 'demo@gearflow.app', password: 'ride123' });
 const bikeForm = reactive({ id: '', name: '', brand: '', model: '', bikeType: 'road', purchaseDate: '', notes: '' });
@@ -122,12 +128,7 @@ const insights = ref<any>(null);
 const animatedViews = ref<View[]>([]);
 
 const activePage = computed(() => pageCopy[currentView.value]);
-const activeViewIndex = computed(() => views.findIndex((view) => view.key === currentView.value));
-const transitionShellClass = computed(() => ({
-  'view-forward': transitionDirection.value === 'forward',
-  'view-backward': transitionDirection.value === 'backward'
-}));
-const transitionName = computed(() => `page-${transitionDirection.value}`);
+const activeViewIndex = computed(() => views.findIndex((view) => view.key === navigationView.value));
 const totalDistance = computed(() => rides.value.reduce((sum, ride) => sum + Number(ride.distanceKm || 0), 0));
 const totalDuration = computed(() => rides.value.reduce((sum, ride) => sum + Number(ride.durationMin || 0), 0));
 const totalElevation = computed(() => rides.value.reduce((sum, ride) => sum + Number(ride.elevationM || 0), 0));
@@ -433,14 +434,10 @@ function serviceTone(item: Maintenance) {
   return 'success';
 }
 
-function getViewIndex(view: View) {
-  return views.findIndex((item) => item.key === view);
-}
-
 async function updateNavIndicator() {
   await nextTick();
   const nav = navRef.value;
-  const activeButton = nav?.querySelector<HTMLButtonElement>(`button[data-view="${currentView.value}"]`);
+  const activeButton = nav?.querySelector<HTMLButtonElement>(`button[data-view="${navigationView.value}"]`);
   if (!nav || !activeButton) return;
 
   const navRect = nav.getBoundingClientRect();
@@ -448,35 +445,133 @@ async function updateNavIndicator() {
   const isMobileRail = window.matchMedia('(max-width: 860px)').matches;
 
   if (isMobileRail) {
-    navIndicator.top = `${buttonRect.bottom - navRect.top - 8}px`;
-    navIndicator.left = `${buttonRect.left - navRect.left + 18}px`;
-    navIndicator.width = `${Math.max(24, buttonRect.width - 36)}px`;
-    navIndicator.height = '3px';
+    navIndicator.x = `${buttonRect.left - navRect.left + 18}px`;
+    navIndicator.y = `${buttonRect.bottom - navRect.top - 8}px`;
+    navIndicator.scaleX = String(Math.max(24, buttonRect.width - 36));
+    navIndicator.scaleY = '3';
   } else {
-    navIndicator.top = `${buttonRect.top - navRect.top + 10}px`;
-    navIndicator.left = '6px';
-    navIndicator.width = '3px';
-    navIndicator.height = `${Math.max(18, buttonRect.height - 20)}px`;
+    navIndicator.x = '6px';
+    navIndicator.y = `${buttonRect.top - navRect.top + 10}px`;
+    navIndicator.scaleX = '3';
+    navIndicator.scaleY = String(Math.max(18, buttonRect.height - 20));
   }
 }
 
-async function switchView(view: View) {
-  if (view === currentView.value || isViewTransitioning.value) return;
-
-  const previousIndex = getViewIndex(currentView.value);
-  const nextIndex = getViewIndex(view);
-  transitionDirection.value = nextIndex > previousIndex ? 'forward' : 'backward';
-  isViewTransitioning.value = true;
-  await updateNavIndicator();
-  currentView.value = view;
+function clearRouteShiftTargets() {
+  routeShiftTimeline?.kill();
+  routeShiftTimeline = null;
+  const targets = [pageMotionRef.value, routeSignalRef.value].filter(Boolean) as HTMLElement[];
+  if (targets.length) {
+    gsap.killTweensOf(targets);
+    gsap.set(targets, { clearProps: 'transform,opacity,visibility,willChange' });
+    targets.forEach(resetRouteShiftStyles);
+  }
 }
 
-async function handleViewEnter() {
+function resetRouteShiftStyles(target: HTMLElement) {
+  ['transform', 'transform-origin', 'translate', 'scale', 'rotate', 'opacity', 'visibility', 'will-change'].forEach((property) => {
+    target.style.removeProperty(property);
+  });
+}
+
+function playRouteTimeline(build: (timeline: gsap.core.Timeline) => void) {
+  return new Promise<void>((resolve) => {
+    const timeline = gsap.timeline({
+      onComplete: resolve,
+      onInterrupt: resolve
+    });
+    routeShiftTimeline = timeline;
+    build(timeline);
+  });
+}
+
+async function finishViewEnter(token: number) {
   if (!animatedViews.value.includes(currentView.value)) {
     animatedViews.value.push(currentView.value);
   }
+  if (token !== routeShiftToken) return;
   isViewTransitioning.value = false;
   await updateNavIndicator();
+}
+
+async function runRouteShift(view: View, token: number) {
+  const isReducedMotion = prefersReducedMotion.matches;
+  const isMobile = window.matchMedia('(max-width: 860px)').matches;
+  const exitX = isMobile ? -7 : -14;
+  const enterX = isMobile ? 7 : 12;
+  const wrapper = pageMotionRef.value;
+  const signal = routeSignalRef.value;
+
+  if (view === currentView.value) {
+    clearRouteShiftTargets();
+    if (token === routeShiftToken) isViewTransitioning.value = false;
+    return;
+  }
+
+  if (wrapper) {
+    await playRouteTimeline((timeline) => {
+      timeline.set(wrapper, { willChange: 'transform,opacity' });
+      if (signal && !isReducedMotion && !isMobile) {
+        timeline
+          .set(signal, { autoAlpha: 0, scaleX: 0.16, transformOrigin: 'left center', willChange: 'transform,opacity' })
+          .to(signal, { autoAlpha: 0.82, scaleX: 1, duration: 0.09, ease: 'power2.out' }, 0.035)
+          .to(signal, { autoAlpha: 0, scaleX: 0.62, duration: 0.12, ease: 'power1.in' }, 0.135);
+      }
+      timeline.to(wrapper, {
+        x: isReducedMotion ? 0 : exitX,
+        scale: isReducedMotion ? 1 : 0.988,
+        autoAlpha: 0,
+        duration: isReducedMotion ? 0.08 : 0.14,
+        ease: isReducedMotion ? 'none' : 'power2.in'
+      }, isReducedMotion ? 0 : 0.035);
+    });
+  }
+
+  if (token !== routeShiftToken) return;
+
+  currentView.value = view;
+  await nextTick();
+  const nextWrapper = pageMotionRef.value;
+  if (!nextWrapper || token !== routeShiftToken) return;
+
+  await playRouteTimeline((timeline) => {
+    timeline.fromTo(nextWrapper,
+      {
+        x: isReducedMotion ? 0 : enterX,
+        scale: isReducedMotion ? 1 : 0.992,
+        autoAlpha: 0,
+        willChange: 'transform,opacity'
+      },
+      {
+        x: 0,
+        scale: 1,
+        autoAlpha: 1,
+        duration: isReducedMotion ? 0.1 : (isMobile ? 0.18 : 0.2),
+        ease: isReducedMotion ? 'none' : 'power2.out',
+        clearProps: 'transform,opacity,visibility,willChange'
+      }
+    );
+  });
+
+  if (token !== routeShiftToken) return;
+  if (signal) {
+    gsap.set(signal, { clearProps: 'transform,opacity,visibility,willChange' });
+    resetRouteShiftStyles(signal);
+  }
+  resetRouteShiftStyles(nextWrapper);
+  await finishViewEnter(token);
+}
+
+async function switchView(view: View) {
+  if (view === navigationView.value && !isViewTransitioning.value) return;
+
+  navigationView.value = view;
+  const token = ++routeShiftToken;
+  clearRouteShiftTargets();
+  isViewTransitioning.value = true;
+  await updateNavIndicator();
+  if (token !== routeShiftToken) return;
+  void runRouteShift(view, token);
 }
 
 function handlePrimaryAction() {
@@ -763,6 +858,9 @@ async function deleteMaintenance(id: string, title = 'service') {
 }
 
 onMounted(async () => {
+  if (appShellRef.value) {
+    routeShiftContext = gsap.context(() => {}, appShellRef.value);
+  }
   await updateNavIndicator();
   window.addEventListener('resize', updateNavIndicator);
   if (typeof document !== 'undefined' && 'fonts' in document) {
@@ -787,6 +885,10 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  routeShiftToken += 1;
+  clearRouteShiftTargets();
+  routeShiftContext?.revert();
+  routeShiftContext = null;
   window.removeEventListener('resize', updateNavIndicator);
 });
 </script>
@@ -826,7 +928,7 @@ onBeforeUnmount(() => {
     </section>
   </main>
 
-  <main v-else class="app-shell" :class="transitionShellClass">
+  <main v-else ref="appShellRef" class="app-shell">
     <aside class="sidebar">
       <div class="brand-lockup">
         <span class="chain-mark"></span>
@@ -835,10 +937,10 @@ onBeforeUnmount(() => {
       <nav
         ref="navRef"
         class="primary-nav"
-        :style="{ '--nav-indicator-top': navIndicator.top, '--nav-indicator-left': navIndicator.left, '--nav-indicator-width': navIndicator.width, '--nav-indicator-height': navIndicator.height }"
+        :style="{ '--nav-indicator-x': navIndicator.x, '--nav-indicator-y': navIndicator.y, '--nav-indicator-scale-x': navIndicator.scaleX, '--nav-indicator-scale-y': navIndicator.scaleY }"
       >
         <span class="nav-active-indicator" aria-hidden="true"></span>
-        <button v-for="(view, index) in views" :key="view.key" :data-view="view.key" :class="{ active: currentView === view.key }" :aria-current="currentView === view.key ? 'page' : undefined" :style="{ '--nav-index': index, '--active-index': activeViewIndex }" @click="switchView(view.key)">
+        <button v-for="(view, index) in views" :key="view.key" :data-view="view.key" :class="{ active: navigationView === view.key }" :aria-current="navigationView === view.key ? 'page' : undefined" :style="{ '--nav-index': index, '--active-index': activeViewIndex }" @click="switchView(view.key)">
           {{ view.label }}
         </button>
       </nav>
@@ -850,9 +952,11 @@ onBeforeUnmount(() => {
       </div>
     </aside>
 
+    <span ref="routeSignalRef" class="route-signal-line" aria-hidden="true"></span>
+
     <section class="workspace">
-      <Transition :name="transitionName" mode="out-in" appear @after-enter="handleViewEnter">
-        <div :key="currentView" class="page-content" :class="[`page-view-${currentView}`, { 'page-view-fresh': !animatedViews.includes(currentView) }]">
+      <div class="page-viewport">
+        <div ref="pageMotionRef" :key="currentView" class="page-content page-motion-wrapper" :class="[`page-view-${currentView}`, { 'page-view-fresh': !animatedViews.includes(currentView) }]">
           <header class="page-header">
             <div>
               <p class="eyebrow">Cycling operations</p>
@@ -1222,7 +1326,7 @@ onBeforeUnmount(() => {
             </section>
           </section>
         </div>
-      </Transition>
+      </div>
     </section>
   </main>
 </template>
