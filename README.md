@@ -1,20 +1,78 @@
 # GearFlow
 
-GearFlow is a cycling record and gear management system built with Vue 3, Vite, Node.js, Express, Prisma, and MySQL. It supports user registration, login, bikes, rides, gear assets, maintenance records, and dashboard statistics.
+GearFlow is a full-stack cycling garage: it keeps bikes, ride records, gear assets, maintenance, and upgrade plans in one private performance workshop. The interface pairs a Vue dashboard with a route planner, animated route story, Wavy Cubes background, and smoked-glass panels.
 
-## Requirements
+## Online demo
 
-- Node.js 20 LTS or higher.
-- npm.
-- MySQL Server 8.x or compatible local MySQL service.
-- MySQL Workbench is optional.
-- No Docker required.
+- Site: [http://120.26.32.163/](http://120.26.32.163/)
+- Demo account: `demo@gearflow.app`
+- Demo password: `ride123`
 
-## MySQL Setup
+The demo is currently served over HTTP by IP address. Use it for course review only; do not enter personal credentials.
 
-Install and start MySQL first. This repository does not create or overwrite any production database automatically.
+## Highlights
 
-Create the local database and user:
+- HTTP-only cookie authentication with registration, login, logout, and protected views.
+- CRUD management for bikes, rides, gear, maintenance, and wishlist items.
+- Dashboard and insights generated from persisted MySQL data.
+- Gear value preview using local depreciation rules without overwriting stored asset data.
+- Ride Planner with place search, road-cycling routes, weather, Leaflet maps, SVG route/rider animation, a three-stage Route Story, and an expanded map dialog.
+- Responsive dark cockpit UI with Three.js Wavy Cubes, smoked-glass surfaces, and mechanical page transitions.
+
+## Technology
+
+| Layer | Tools |
+| --- | --- |
+| Frontend | Vue 3, TypeScript, Vite, GSAP, Three.js, Leaflet |
+| Backend | Node.js, Express, cookie-parser, CORS |
+| Data | MySQL 8, Prisma |
+| Route data | OpenRouteService and Open-Meteo |
+| Operations | Nginx and PM2 on Alibaba Cloud ECS |
+
+## Project structure
+
+```text
+GearFlow/
+├── client/                 # Vue/Vite application
+│   └── src/
+│       ├── components/     # Ride Planner, Route Story, Wavy Cubes
+│       ├── shaders/        # Three.js shader sources
+│       └── App.vue         # App shell and view state
+├── server/                 # Express API and Prisma integration
+│   ├── controllers/
+│   ├── routes/
+│   ├── services/
+│   └── prisma/
+├── docs/images/            # Curated README screenshots
+└── scripts/                # Local smoke-test helper
+```
+
+## Local development
+
+### Prerequisites
+
+- Node.js 20 or later
+- npm
+- MySQL 8 or a compatible MySQL server
+- An OpenRouteService API key for place search and routing
+
+### Install and configure
+
+```bash
+npm install
+npm install --prefix server
+npm install --prefix client
+```
+
+Copy the example environment file, then replace its placeholders:
+
+```powershell
+Copy-Item server/.env.example server/.env
+```
+
+Required values are documented in [`server/.env.example`](server/.env.example). The running app uses `SESSION_SECRET`; `JWT_SECRET` is an explicit placeholder for deployment compatibility and is not consumed by the current cookie-session implementation.
+
+Create a local database and a least-privilege MySQL user, then set `DATABASE_URL` in `server/.env`. For example:
 
 ```sql
 CREATE DATABASE gearflow CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -23,145 +81,81 @@ GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES ON 
 FLUSH PRIVILEGES;
 ```
 
-The review SQL file is available at `docs/database.sql`.
+### Initialize MySQL and start the app
 
-## Local Development
-
-Install dependencies:
+Run the Prisma migration and seed only against a local/development database:
 
 ```bash
-npm run install:all
-```
-
-Create `server/.env` from `server/.env.example` and replace the password:
-
-```env
-NODE_ENV=development
-PORT=3001
-DATABASE_URL="mysql://gearflow_user:replace_password@localhost:3306/gearflow"
-DEMO_EMAIL=demo@gearflow.app
-DEMO_PASSWORD=ride123
-SESSION_SECRET=replace-with-a-long-random-string
-COOKIE_SECURE=false
-```
-
-After MySQL is installed and `DATABASE_URL` is correct, initialize the schema and seed local demo data:
-
-```bash
+npm run prisma:generate --prefix server
 npm run db:migrate
 npm run db:seed
 ```
 
-Do not run these commands against production without a verified backup.
-
-Start the backend and frontend:
+Start both services:
 
 ```bash
 npm run dev
 ```
 
-Local URLs:
-
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:3001`
-- Health: `http://localhost:3001/api/health`
-- Status: `http://localhost:3001/api/status`
+- Health check: `http://localhost:3001/api/health`
 
-Demo seed account:
+Useful checks:
 
-- Email: `demo@gearflow.app`
-- Password: `ride123`
-
-## Scripts
-
-Root scripts:
-
-- `npm run install:all`: install root, server, and client dependencies.
-- `npm run dev`: run server and client together.
-- `npm run build`: generate Prisma client and build the frontend.
-- `npm run start`: start the backend server.
-- `npm run db:migrate`: run Prisma migration against the configured MySQL database.
-- `npm run db:seed`: insert local demo data when the user table is empty.
-
-Server scripts:
-
-- `npm run start --prefix server`: start Express on port `3001`.
-- `npm run dev --prefix server`: start Express with nodemon.
-- `npm run prisma:generate --prefix server`: generate Prisma client.
-- `npm run prisma:migrate --prefix server`: run `prisma migrate dev`.
-- `npm run seed --prefix server`: seed local demo data.
-
-Client scripts:
-
-- `npm run dev --prefix client`: start Vite on port `5173`.
-- `npm run build --prefix client`: build `client/dist`.
-- `npm run preview --prefix client`: preview the built frontend.
-
-## API and Auth
-
-The frontend calls relative `/api/...` paths with `credentials: 'include'`. Auth uses an HTTP-only cookie named `gearflow_session`.
-
-Auth endpoints:
-
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
-
-Main API paths:
-
-- `/api/bikes`
-- `/api/rides`
-- `/api/gears`
-- `/api/maintenance`
-- `/api/wishlist`
-- `/api/dashboard/summary`
-- `/api/insights/overview`
-- `/api/health`
-- `/api/status`
-
-## Data Model
-
-Core tables:
-
-- `User`: registered users and roles.
-- `Bike`: independently managed bicycles.
-- `Ride`: cycling records with distance, duration, elevation, and route.
-- `Gear`: equipment assets linked to a user and optionally a bike.
-- `Maintenance`: maintenance records linked to gear.
-- `WishlistItem`: optional upgrade planning.
-
-Money and distance fields use Prisma Decimal and are serialized to JavaScript numbers in API responses.
-
-## Production Notes
-
-The previous deployment report describes an older SQLite deployment. For MySQL deployment, verify locally first, then configure production `DATABASE_URL` to a dedicated MySQL database. Back up any existing production data before migration.
-
-Nginx should serve `client/dist` for the frontend and proxy `/api` to the backend:
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    root /www/wwwroot/gearflow/client/dist;
-    index index.html;
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:3001/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Cookie $http_cookie;
-        proxy_pass_header Set-Cookie;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
+```bash
+npm run build
+npm run ui:smoke
 ```
 
-Set `COOKIE_SECURE=true` only when serving over HTTPS.
+`ui:smoke` expects the local app to be available. The build command generates Prisma Client and builds the Vue application.
+
+## Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | MySQL Prisma connection URL |
+| `PORT` | Express listening port; defaults to `3001` |
+| `SESSION_SECRET` | Secret used by the current HTTP-only cookie session |
+| `JWT_SECRET` | Reserved placeholder; not read by the current application |
+| `ORS_API_KEY` | OpenRouteService key for place search and route generation |
+| `DEMO_EMAIL` / `DEMO_PASSWORD` | Seeded demonstration account |
+| `COOKIE_SECURE` | Set to `true` only behind HTTPS |
+
+Never commit `server/.env`, database passwords, API keys, or private keys.
+
+## Deployment architecture
+
+```text
+Browser
+  │ HTTP :80
+  ▼
+Nginx (SPA fallback)
+  ├── static Vue build
+  └── /api → Express / PM2 (127.0.0.1 only)
+                     │
+                     ▼
+                MySQL (127.0.0.1 only)
+```
+
+The public server exposes only Nginx. The Express API and MySQL remain bound to loopback addresses. A release candidate environment is kept separately during verification so the previous production process and directories can be restored quickly.
+
+## Known limitations
+
+- Route search, route geometry, and weather depend on external OpenRouteService/Open-Meteo availability and an active `ORS_API_KEY`.
+- The current public demo uses HTTP rather than HTTPS; set `COOKIE_SECURE=true` only after HTTPS is configured.
+- This is a course/private-use project, not a multi-tenant commercial service.
+
+## Screenshots
+
+![Dashboard with Wavy Cubes and smoked glass](docs/images/dashboard-smoked-glass.png)
+
+![Ride Planner route story](docs/images/route-story-desktop.png)
+
+![Expanded map on mobile](docs/images/expanded-map-mobile.png)
+
+![Gear desktop view](docs/images/gear-desktop.png)
+
+![Rides desktop view](docs/images/rides-desktop.png)
+
+![Dashboard mobile view](docs/images/dashboard-mobile.png)

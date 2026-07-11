@@ -1,23 +1,31 @@
+# Dependencies and build output
 node_modules/
+**/node_modules/
 client/dist/
 dist/
-server/prisma/dev.db
-server/prisma/dev.db-journal
-server/prisma/dev.db-wal
-server/prisma/dev.db-shm
-.env
-server/.env
-server/.env.*
-!server/.env.example
-!server/.env.template
-!server/.env.sample
-npm-debug.log*
-*.log
-smoke-cookies.txt
+**/dist/
 *.tsbuildinfo
-.DS_Store
 
-# Local visual-review and browser-test artifacts
+# Local environment files. Commit examples only.
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+!**/.env.template
+!**/.env.sample
+
+# Local databases and runtime state
+server/prisma/*.db
+server/prisma/*.db-*
+*.sqlite
+*.sqlite3
+*.log
+npm-debug.log*
+smoke-cookies.txt
+
+# Browser-test, visual-review, and editor artifacts
 output/
 product-design-audit/
 .playwright-cli/
@@ -26,3 +34,6 @@ playwright-report/
 test-results/
 playwright/screenshots/
 playwright/videos/
+.idea/
+.DS_Store
+Thumbs.db
