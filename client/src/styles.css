@@ -25,6 +25,24 @@
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
   --radius: 8px;
   --radius-sm: 6px;
+
+  /* Tuned against the current Wavy Cubes Carbon Brass background. Recheck opacity and blur before a full-site rollout. */
+  --glass-base-bg: rgba(12, 15, 18, 0.82);
+  --glass-elevated-bg: rgba(12, 15, 18, 0.72);
+  --glass-dense-bg: rgba(12, 15, 18, 0.89);
+  --glass-hover-bg: rgba(12, 15, 18, 0.87);
+  --glass-border: rgba(245, 240, 220, 0.08);
+  --glass-border-hover: rgba(216, 197, 104, 0.24);
+  --glass-inner-highlight: rgba(255, 252, 238, 0.055);
+  --glass-blur-base: 12px;
+  --glass-blur-elevated: 17px;
+  --glass-shadow-soft: 0 18px 46px rgba(0, 0, 0, 0.24);
+  --glass-shadow-elevated: 0 26px 70px rgba(0, 0, 0, 0.30);
+  --glass-text-primary: rgba(244, 241, 228, 0.96);
+  --glass-text-secondary: rgba(220, 216, 198, 0.73);
+  --glass-text-muted: rgba(205, 200, 180, 0.52);
+  --glass-accent: #d7c16b;
+  --glass-accent-soft: rgba(215, 193, 107, 0.12);
 }
 
 * {
@@ -347,9 +365,10 @@ textarea {
   gap: 30px;
   padding: 24px 18px;
   background:
-    linear-gradient(180deg, rgba(215, 193, 107, 0.035), transparent 280px),
-    linear-gradient(90deg, rgba(8, 10, 8, 0.95) 0%, rgba(8, 10, 8, 0.84) 50%, rgba(8, 10, 8, 0.52) 100%);
+    linear-gradient(180deg, var(--glass-accent-soft), transparent 280px),
+    linear-gradient(90deg, rgba(8, 10, 8, 0.95) 0%, rgba(8, 10, 8, 0.86) 50%, rgba(8, 10, 8, 0.58) 100%);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   box-shadow: 14px 0 34px rgba(0, 0, 0, 0.14);
   color: var(--ink);
   border-right: 1px solid var(--line);
@@ -579,6 +598,77 @@ textarea {
   gap: 18px;
 }
 
+/* Dashboard-only material hierarchy: blur belongs to the primary surface, never to rows, buttons, or badges inside it. */
+.dashboard-layout .glass-surface {
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-inner-highlight), var(--glass-shadow-soft);
+  color: var(--glass-text-primary);
+  -webkit-backdrop-filter: blur(var(--glass-blur-base));
+  backdrop-filter: blur(var(--glass-blur-base));
+  transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.dashboard-layout .glass-surface--base {
+  background-color: var(--glass-base-bg);
+}
+
+.dashboard-layout .glass-surface--dense {
+  background-color: var(--glass-dense-bg);
+}
+
+.dashboard-layout .glass-surface--elevated {
+  border-color: rgba(245, 240, 220, 0.12);
+  background-color: var(--glass-elevated-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 252, 238, 0.075), var(--glass-shadow-elevated);
+  -webkit-backdrop-filter: blur(var(--glass-blur-elevated));
+  backdrop-filter: blur(var(--glass-blur-elevated));
+}
+
+.dashboard-layout .dashboard-hero-panel.glass-surface--elevated {
+  border-color: rgba(245, 240, 220, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 252, 238, 0.032), rgba(8, 10, 9, 0.035)),
+    var(--glass-elevated-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 252, 238, 0.075), var(--glass-shadow-elevated);
+}
+
+.dashboard-layout .readout-band.glass-surface--dense,
+.dashboard-layout .dashboard-columns > .panel.glass-surface--base {
+  border-color: var(--glass-border);
+  background:
+    linear-gradient(180deg, rgba(255, 252, 238, 0.028), rgba(255, 255, 255, 0.008)),
+    var(--glass-base-bg);
+  box-shadow: inset 0 1px 0 var(--glass-inner-highlight), var(--glass-shadow-soft);
+}
+
+.dashboard-layout .readout-band.glass-surface--dense {
+  background:
+    linear-gradient(180deg, rgba(255, 252, 238, 0.024), rgba(255, 255, 255, 0.004)),
+    var(--glass-dense-bg);
+}
+
+.dashboard-layout .glass-surface--base .panel-heading,
+.dashboard-layout .glass-surface--base .summary-copy small,
+.dashboard-layout .glass-surface--dense .readout-item small {
+  color: var(--glass-text-secondary);
+}
+
+.dashboard-layout .glass-surface--dense .readout-item span,
+.dashboard-layout .glass-surface--base .action-card span,
+.dashboard-layout .glass-surface--base .activity-row small {
+  color: var(--glass-text-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-layout .dashboard-summary-strip .glass-surface--base:hover,
+  .dashboard-layout .dashboard-columns > .glass-surface--base:hover {
+    border-color: var(--glass-border-hover);
+    background-color: var(--glass-hover-bg);
+    box-shadow: inset 0 1px 0 rgba(255, 252, 238, 0.075), 0 22px 52px rgba(0, 0, 0, 0.28);
+    transform: translateY(-2px);
+  }
+}
+
 .hero-panel,
 .panel,
 .metric,
@@ -648,7 +738,7 @@ textarea {
 
 .dashboard-overlay {
   background:
-    linear-gradient(90deg, rgba(5, 7, 5, 0.88) 0%, rgba(5, 7, 5, 0.70) 34%, rgba(5, 7, 5, 0.28) 67%, rgba(5, 7, 5, 0.08) 100%),
+    linear-gradient(90deg, rgba(5, 7, 5, 0.91) 0%, rgba(5, 7, 5, 0.76) 38%, rgba(5, 7, 5, 0.34) 68%, rgba(5, 7, 5, 0.10) 100%),
     linear-gradient(180deg, rgba(5, 7, 5, 0.05), rgba(5, 7, 5, 0.60));
 }
 
@@ -815,14 +905,19 @@ textarea {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.012)),
-    rgba(16, 19, 16, 0.92);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
+    var(--glass-base-bg);
   padding: 18px 18px 18px 20px;
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.22);
 }
 
 .summary-card:nth-child(2) {
   min-height: 112px;
+}
+
+.dashboard-layout .dashboard-summary-strip .summary-card.glass-surface--base {
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-inner-highlight), var(--glass-shadow-soft);
 }
 
 .summary-copy {
@@ -1020,6 +1115,23 @@ textarea {
   background: var(--panel-soft);
   color: var(--ink);
   text-align: left;
+}
+
+.dashboard-layout .glass-surface .action-card,
+.dashboard-layout .glass-surface .activity-row {
+  background: rgba(7, 9, 8, 0.68);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dashboard-layout .glass-surface--base,
+  .dashboard-layout .glass-surface--elevated,
+  .dashboard-layout .glass-surface--dense {
+    background-color: rgba(10, 13, 14, 0.96);
+  }
+
+  .sidebar {
+    background: rgba(8, 10, 8, 0.98);
+  }
 }
 
 .action-card {
@@ -2023,6 +2135,23 @@ textarea {
 }
 
 @media (max-width: 640px) {
+  :root {
+    --glass-base-bg: rgba(12, 15, 18, 0.90);
+    --glass-elevated-bg: rgba(12, 15, 18, 0.84);
+    --glass-dense-bg: rgba(12, 15, 18, 0.94);
+    --glass-hover-bg: rgba(12, 15, 18, 0.90);
+    --glass-blur-base: 8px;
+    --glass-blur-elevated: 10px;
+  }
+
+  .dashboard-layout .dashboard-summary-strip .glass-surface--base:hover,
+  .dashboard-layout .dashboard-columns > .glass-surface--base:hover {
+    border-color: var(--glass-border);
+    background-color: var(--glass-base-bg);
+    box-shadow: inset 0 1px 0 var(--glass-inner-highlight), var(--glass-shadow-soft);
+    transform: none;
+  }
+
   .workspace,
   .sidebar,
   .auth-form,
@@ -2915,6 +3044,8 @@ textarea {
 }
 
 .expanded-map-shell header {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2924,6 +3055,21 @@ textarea {
 }
 
 .expanded-map-shell header p { margin: 0; }
+
+.expanded-map-shell header button {
+  position: relative;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+/* The expanded map occupies only the grid's map row; it must never cover the close control in the header. */
+.expanded-leaflet-map {
+  position: relative;
+  z-index: 1;
+  inset: auto;
+  grid-row: 2;
+  min-height: 0;
+}
 
 .expanded-leaflet-map .leaflet-control-attribution {
   font-size: 0.7rem;

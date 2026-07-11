@@ -872,7 +872,7 @@ onBeforeUnmount(() => {
           </div>
 
           <section v-if="currentView === 'dashboard'" class="dashboard-layout">
-            <article class="hero-panel dashboard-hero-panel">
+            <article class="hero-panel dashboard-hero-panel glass-surface glass-surface--elevated">
               <img :src="dashboardHeroUrl" alt="User's Merida road bike overlooking the city and hills" class="hero-image" />
               <div class="image-overlay dashboard-overlay"></div>
               <div class="hero-content">
@@ -900,7 +900,7 @@ onBeforeUnmount(() => {
               <span>{{ today() }}</span>
             </div>
 
-            <section class="panel readout-band cockpit-readouts">
+            <section class="panel readout-band cockpit-readouts glass-surface glass-surface--dense">
               <article v-for="metric in dashboardMetrics" :key="metric.label" class="readout-item" :class="`metric-${metric.tone}`">
                 <span>{{ metric.label }}</span>
                 <strong>{{ metric.value }}</strong>
@@ -909,7 +909,7 @@ onBeforeUnmount(() => {
             </section>
 
             <section class="dashboard-summary-strip" aria-label="Garage summary">
-              <article v-for="item in dashboardSummaries" :key="item.label" class="summary-card" :class="[`summary-${item.icon}`, `summary-${item.tone}`]">
+              <article v-for="item in dashboardSummaries" :key="item.label" class="summary-card glass-surface glass-surface--base" :class="[`summary-${item.icon}`, `summary-${item.tone}`]">
                 <div class="summary-copy">
                   <span>{{ item.label }}</span>
                   <strong>{{ item.value }}</strong>
@@ -920,7 +920,7 @@ onBeforeUnmount(() => {
             </section>
 
             <section class="dashboard-columns">
-              <article class="panel">
+              <article class="panel glass-surface glass-surface--base">
                 <div class="panel-heading">
                   <div>
                     <p class="eyebrow">Garage queue</p>
@@ -940,7 +940,7 @@ onBeforeUnmount(() => {
                 </div>
               </article>
 
-              <article class="panel">
+              <article class="panel glass-surface glass-surface--base">
                 <div class="panel-heading">
                   <div>
                     <p class="eyebrow">Garage log</p>
