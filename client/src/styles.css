@@ -6,9 +6,9 @@
   --subtle: #8d8a82;
   --paper: #070907;
   --paper-strong: #090b09;
-  --panel: #101310;
-  --panel-soft: #141814;
-  --line: rgba(255, 255, 255, 0.08);
+  --panel: rgba(16, 19, 16, 0.94);
+  --panel-soft: rgba(20, 24, 20, 0.92);
+  --line: rgba(239, 233, 213, 0.09);
   --line-strong: rgba(255, 255, 255, 0.16);
   --primary: #b8c6a0;
   --primary-dark: #151812;
@@ -348,8 +348,9 @@ textarea {
   padding: 24px 18px;
   background:
     linear-gradient(180deg, rgba(215, 193, 107, 0.035), transparent 280px),
-    linear-gradient(90deg, rgba(8, 10, 8, 0.94) 0%, rgba(8, 10, 8, 0.82) 55%, rgba(8, 10, 8, 0.6) 100%);
-  backdrop-filter: blur(9px);
+    linear-gradient(90deg, rgba(8, 10, 8, 0.95) 0%, rgba(8, 10, 8, 0.84) 50%, rgba(8, 10, 8, 0.52) 100%);
+  backdrop-filter: blur(10px);
+  box-shadow: 14px 0 34px rgba(0, 0, 0, 0.14);
   color: var(--ink);
   border-right: 1px solid var(--line);
 }
