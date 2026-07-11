@@ -10,8 +10,8 @@ const failed = ref(false);
 const TRAIL_SAMPLES = 24;
 const COLORS = {
   scene: '#080A08',
-  cubeBase: '#46493F',
-  waveMid: '#8A7B3F',
+  cubeBase: '#62645A',
+  waveMid: '#9A9069',
   waveHighlight: '#D8C568',
   peakHighlight: '#F0D98A'
 };
@@ -41,9 +41,9 @@ let pointerWorld: any = null;
 let groundPlane: any = null;
 
 function gridSettings() {
-  if (window.innerWidth < 768) return { columns: 26, rows: 18, dynamic: false, waveHeight: 0.2 };
-  if (window.innerWidth < 1100) return { columns: 38, rows: 26, dynamic: true, waveHeight: 0.32 };
-  return { columns: 52, rows: 34, dynamic: true, waveHeight: 0.4 };
+  if (window.innerWidth < 768) return { columns: 38, rows: 28, dynamic: false, waveHeight: 0.16 };
+  if (window.innerWidth < 1100) return { columns: 60, rows: 42, dynamic: true, waveHeight: 0.28 };
+  return { columns: 76, rows: 52, dynamic: true, waveHeight: 0.34 };
 }
 
 function reducedMotion() {
@@ -69,8 +69,8 @@ function buildGrid() {
   const settings = gridSettings();
   dynamicEnabled = settings.dynamic && !reducedMotion();
   const count = settings.columns * settings.rows;
-  const cubeSize = window.innerWidth < 768 ? 0.28 : 0.3;
-  const gap = 0.018;
+  const cubeSize = window.innerWidth < 768 ? 0.22 : 0.26;
+  const gap = 0.012;
   const spacing = cubeSize + gap;
   const baseHeight = 0.26;
   const xOffset = ((settings.columns - 1) * spacing) / 2;
@@ -95,7 +95,7 @@ function buildGrid() {
       uTrailTexture: { value: trailTexture },
       uTrailCount: { value: 0 },
       uTrailLifetime: { value: 1.15 },
-      uWaveRadius: { value: window.innerWidth < 1100 ? 1.55 : 1.8 },
+      uWaveRadius: { value: window.innerWidth < 1100 ? 1.45 : 1.65 },
       uWaveHeight: { value: settings.waveHeight },
       uCubeBase: { value: new THREE.Color(COLORS.cubeBase) },
       uWaveMid: { value: new THREE.Color(COLORS.waveMid) },
@@ -198,7 +198,12 @@ function stopRendering() {
 
 function resize() {
   if (!renderer || !camera) return;
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const aspect = window.innerWidth / window.innerHeight;
+  const viewHeight = window.innerWidth < 768 ? 9.4 : 10.6;
+  camera.left = (-viewHeight * aspect) / 2;
+  camera.right = (viewHeight * aspect) / 2;
+  camera.top = viewHeight / 2;
+  camera.bottom = -viewHeight / 2;
   camera.updateProjectionMatrix();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, window.innerWidth < 768 ? 1 : 1.5));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -234,9 +239,10 @@ async function initialize() {
     renderer.domElement.addEventListener('webglcontextlost', onContextLost, false);
     rootEl.value.appendChild(renderer.domElement);
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 80);
-    camera.position.set(0, 8.6, 10.8);
-    camera.lookAt(0, 0, 0.3);
+    camera = new THREE.OrthographicCamera(-8, 8, 5, -5, 0.1, 80);
+    camera.position.set(0, 10.8, 2.4);
+    camera.up.set(0, 0, -1);
+    camera.lookAt(0, 0, 0);
     buildGrid();
     resize();
     renderer.render(scene, camera);
