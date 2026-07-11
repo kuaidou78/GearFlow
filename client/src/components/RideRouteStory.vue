@@ -239,6 +239,7 @@ function setupStoryAnimation(initialProgress = 0) {
     gsap.set(progressPathEl.value, { drawSVG: '0% 0%' });
     gsap.set(riderEl.value, { autoAlpha: 1 });
     gsap.set(endMarkerEl.value, { autoAlpha: 0.42 });
+    gsap.set(mapFrameEl.value, { transformOrigin: '50% 50%', willChange: 'transform' });
     activeChapter.value = 0;
     updateStoryProgress(initialProgress);
     storyTimeline = gsap.timeline({
@@ -259,7 +260,12 @@ function setupStoryAnimation(initialProgress = 0) {
     });
     storyTimeline.to(progressPathEl.value, { drawSVG: '0% 100%', duration: 1 }, 0)
       .to(riderEl.value, { motionPath: { path: progressPathEl.value, align: progressPathEl.value, alignOrigin: [0.5, 0.5], autoRotate: true }, duration: 1, immediateRender: true }, 0)
-      .to(endMarkerEl.value, { autoAlpha: 1, duration: 0.2 }, 0.76);
+      .to(endMarkerEl.value, { autoAlpha: 1, duration: 0.2 }, 0.76)
+      // Pin the stable stage, then move only this child frame. The three chapters
+      // stay visibly distinct without putting a transformed ancestor above the pin.
+      .to(mapFrameEl.value, { scale: 0.88, x: 48, y: 10, duration: 0.46 }, 0)
+      .to(mapFrameEl.value, { scale: 0.76, x: 104, y: 26, duration: 0.29 }, 0.46)
+      .to(mapFrameEl.value, { scale: 0.9, x: 38, y: 10, duration: 0.25 }, 0.75);
     storyTimeline.progress(initialProgress);
     applyCamera(initialProgress);
     });
@@ -290,6 +296,7 @@ function initializeMap() {
     }).addTo(storyMap);
     storyMap.fitBounds(latLngs(), { padding: [26, 26], maxZoom: 14 });
     storyMap.once('moveend', () => requestAnimationFrame(() => {
+      storyMap.invalidateSize({ animate: false });
       projectRoute();
       setupStoryAnimation();
       ScrollTrigger.refresh();
@@ -389,11 +396,11 @@ onBeforeUnmount(() => {
       <div ref="mapFrameEl" class="route-story-map-frame">
         <div ref="cameraEl" class="route-story-camera"><div ref="mapEl" class="route-story-leaflet"></div><svg ref="overlayEl" class="route-story-overlay" aria-hidden="true"><path ref="basePathEl" class="route-base-path"/><path ref="progressPathEl" class="route-progress-path"/><g ref="startMarkerEl" class="route-marker route-start-marker"><circle r="7"/><circle class="route-marker-core" r="2.5"/><text x="11" y="-9">START</text></g><g ref="endMarkerEl" class="route-marker route-end-marker"><circle r="7"/><circle class="route-marker-core" r="2.5"/><text x="11" y="-9">END</text></g><g ref="riderEl" class="route-rider"><circle class="route-rider-halo" r="10"/><circle class="route-rider-core" r="6"/><path d="M-2.5 -3.5 L4.5 0 L-2.5 3.5 Z"/></g></svg></div>
         <div class="route-story-map-shade" aria-hidden="true"></div>
+      </div>
         <div class="route-story-top-overlay"><div><p class="eyebrow">Route story</p><strong>{{ startLabel }} <span>→</span> {{ endLabel }}</strong></div><button ref="expandButtonEl" type="button" class="ghost compact" :disabled="!routeAvailable" @click="openExpandedMap">Expand Map</button></div>
         <section class="route-story-copy" aria-live="polite"><Transition name="story-copy" mode="out-in"><article :key="activeStoryChapter.title"><p class="eyebrow">{{ activeStoryChapter.eyebrow }}</p><h3>{{ activeStoryChapter.title }}</h3><strong>{{ activeStoryChapter.detail }}</strong><div class="route-story-metrics"><div v-for="item in activeStoryChapter.metrics" :key="item.label"><span>{{ item.label }}</span><b>{{ item.value }}</b></div></div><p v-if="activeStoryChapter.note" class="route-story-note">{{ activeStoryChapter.note }}</p><template v-if="activeChapter === 2"><p v-for="reason in visibleReasons" :key="reason" class="route-story-reason">{{ reason }}</p><p v-for="warning in visibleWarnings" :key="warning" class="route-story-warning">{{ warning }}</p><div v-if="visibleFactors.length" class="story-factors"><div v-for="factor in visibleFactors" :key="factor.code" :class="factor.impact >= 0 ? 'positive' : 'negative'"><span>{{ factor.message }}</span><b>{{ factor.impact > 0 ? '+' : '' }}{{ factor.impact }}</b></div></div><p class="story-disclaimer">建议基于路线、天气和骑行目标的规则评估，不构成安全保证。</p></template></article></Transition></section>
         <div ref="chapterStatusEl" class="route-story-chapter-status" aria-label="Route story progress"><span v-for="(chapter, index) in chapters" :key="chapter.title" :class="{ active: activeChapter === index }"><b>0{{ index + 1 }}</b><i>{{ index === 0 ? 'Route' : index === 1 ? 'Weather' : 'Call' }}</i></span></div>
         <p class="route-story-attribution">© OpenStreetMap contributors</p>
-      </div>
     </div>
     <div v-if="expanded" class="expanded-map-backdrop" role="dialog" aria-modal="true" aria-label="Expanded route map"><div class="expanded-map-shell"><header><div><p class="eyebrow">Full route view</p><h2>{{ startLabel }} to {{ endLabel }}</h2></div><button type="button" class="ghost compact" @click="closeExpandedMap">Close Map</button></header><div ref="expandedMapEl" class="expanded-leaflet-map"></div></div></div>
   </section>

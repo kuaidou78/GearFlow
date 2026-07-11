@@ -2741,15 +2741,22 @@ textarea {
   color: var(--text-secondary);
 }
 
-.route-story-stage { min-width: 0; }
-.route-story-map-frame {
+.route-story-stage {
   position: relative;
-  overflow: hidden;
+  min-width: 0;
   height: clamp(560px, 72vh, 760px);
+  overflow: visible;
+}
+.route-story-map-frame {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  height: 100%;
   border: 1px solid rgba(241, 237, 227, 0.2);
   border-radius: 8px;
   background: #121310;
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.26);
+  will-change: transform;
 }
 
 .route-story-camera {
@@ -3035,12 +3042,12 @@ textarea {
 }
 
 @media (max-width: 1024px) {
-  .route-story-map-frame { height: clamp(500px, 64vh, 650px); }
+  .route-story-stage { height: clamp(500px, 64vh, 650px); }
   .route-story-copy { left: 18px; bottom: 28px; }
 }
 
 @media (max-width: 899px) {
-  .route-story-map-frame { height: clamp(380px, 54vh, 500px); }
+  .route-story-stage { height: clamp(380px, 54vh, 500px); }
   .route-story-copy { width: min(390px, calc(100% - 94px)); }
 }
 
@@ -3054,7 +3061,7 @@ textarea {
   .route-story { margin-top: 18px; padding-bottom: 72px; }
   .route-story-heading { padding-top: 16px; }
   .route-story-heading h2 { font-size: 1.14rem; }
-  .route-story-map-frame { height: clamp(320px, 54vh, 400px); }
+  .route-story-stage { height: clamp(320px, 54vh, 400px); }
   .route-story-top-overlay { top: 10px; right: 10px; left: 10px; gap: 8px; }
   .route-story-top-overlay > div { max-width: calc(100% - 104px); padding: 7px 8px; }
   .route-story-top-overlay strong { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 0.72rem; }
