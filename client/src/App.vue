@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { gsap } from 'gsap';
 import { get, post, put, remove } from './api';
+import DashboardWavyCubes from './components/DashboardWavyCubes.vue';
 import RidePlannerPage from './components/RidePlannerPage.vue';
-import WavyCubesBackground from './components/WavyCubesBackground.vue';
 
 const dashboardHeroUrl = new URL('./assets/raw/my-merida-dashboard-original.jpeg', import.meta.url).href;
 const sculturaGarageUrl = new URL('./assets/raw/scultura-garage-original.jpg', import.meta.url).href;
@@ -78,8 +77,11 @@ const gearConditionOptions = [
 ];
 const maintenanceTypes = ['cleaning', 'tires', 'chain', 'brakes', 'drivetrain', 'full_service', 'other'];
 
-const currentView = ref<View>('dashboard');
-const navigationView = ref<View>('dashboard');
+const requestedView = ref<View>('dashboard');
+const displayedView = ref<View>('dashboard');
+const pendingView = ref<View | null>(null);
+const currentView = displayedView;
+const navigationView = requestedView;
 const user = ref<User | null>(null);
 const authMode = ref<'login' | 'register'>('login');
 const loading = ref(false);
@@ -102,16 +104,14 @@ const estimatorError = ref('');
 const estimatorStale = ref(false);
 let estimatorRequestId = 0;
 const isViewTransitioning = ref(false);
+const pageVisible = ref(true);
 const navRef = ref<HTMLElement | null>(null);
 const pageMotionRef = ref<HTMLElement | null>(null);
 const routeSignalRef = ref<HTMLElement | null>(null);
-const appShellRef = ref<HTMLElement | null>(null);
 const navIndicator = reactive({ x: '0px', y: '0px', scaleX: '1', scaleY: '1' });
+const routeSignal = reactive({ x: '0px', y: '0px', width: '0px', active: false });
 const fontStatus = ref<'checking' | 'instrument' | 'fallback'>('checking');
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-let routeShiftTimeline: gsap.core.Timeline | null = null;
-let routeShiftContext: gsap.Context | null = null;
-let routeShiftToken = 0;
 
 const authForm = reactive({ name: '', email: 'demo@gearflow.app', password: 'ride123' });
 const bikeForm = reactive({ id: '', name: '', brand: '', model: '', bikeType: 'road', purchaseDate: '', notes: '' });
@@ -457,121 +457,87 @@ async function updateNavIndicator() {
   }
 }
 
-function clearRouteShiftTargets() {
-  routeShiftTimeline?.kill();
-  routeShiftTimeline = null;
-  const targets = [pageMotionRef.value, routeSignalRef.value].filter(Boolean) as HTMLElement[];
-  if (targets.length) {
-    gsap.killTweensOf(targets);
-    gsap.set(targets, { clearProps: 'transform,opacity,visibility,willChange' });
-    targets.forEach(resetRouteShiftStyles);
-  }
-}
-
-function resetRouteShiftStyles(target: HTMLElement) {
-  ['transform', 'transform-origin', 'translate', 'scale', 'rotate', 'opacity', 'visibility', 'will-change'].forEach((property) => {
-    target.style.removeProperty(property);
-  });
-}
-
-function playRouteTimeline(build: (timeline: gsap.core.Timeline) => void) {
-  return new Promise<void>((resolve) => {
-    const timeline = gsap.timeline({
-      onComplete: resolve,
-      onInterrupt: resolve
-    });
-    routeShiftTimeline = timeline;
-    build(timeline);
-  });
-}
-
-async function finishViewEnter(token: number) {
-  if (!animatedViews.value.includes(currentView.value)) {
-    animatedViews.value.push(currentView.value);
-  }
-  if (token !== routeShiftToken) return;
-  isViewTransitioning.value = false;
-  await updateNavIndicator();
-}
-
-async function runRouteShift(view: View, token: number) {
-  const isReducedMotion = prefersReducedMotion.matches;
-  const isMobile = window.matchMedia('(max-width: 860px)').matches;
-  const exitX = isMobile ? -7 : -14;
-  const enterX = isMobile ? 7 : 12;
-  const wrapper = pageMotionRef.value;
+function positionRouteSignal() {
+  const nav = navRef.value;
   const signal = routeSignalRef.value;
+  const target = nav?.querySelector<HTMLButtonElement>(`button[data-view="${requestedView.value}"]`);
+  const page = pageMotionRef.value;
+  if (!nav || !signal || !target || !page) return;
 
-  if (view === currentView.value) {
-    clearRouteShiftTargets();
-    if (token === routeShiftToken) isViewTransitioning.value = false;
+  const targetRect = target.getBoundingClientRect();
+  const pageRect = page.getBoundingClientRect();
+  const start = targetRect.right + 12;
+  const end = Math.max(start + 44, pageRect.left + 18);
+  routeSignal.x = `${start}px`;
+  routeSignal.y = `${targetRect.top + targetRect.height / 2}px`;
+  routeSignal.width = `${end - start}px`;
+}
+
+function beginPendingTransition() {
+  const nextView = pendingView.value;
+  if (!nextView || nextView === displayedView.value) {
+    pendingView.value = null;
+    requestedView.value = displayedView.value;
+    isViewTransitioning.value = false;
+    void updateNavIndicator();
     return;
   }
 
-  if (wrapper) {
-    await playRouteTimeline((timeline) => {
-      timeline.set(wrapper, { willChange: 'transform,opacity' });
-      if (signal && !isReducedMotion && !isMobile) {
-        timeline
-          .set(signal, { autoAlpha: 0, scaleX: 0.16, transformOrigin: 'left center', willChange: 'transform,opacity' })
-          .to(signal, { autoAlpha: 0.82, scaleX: 1, duration: 0.09, ease: 'power2.out' }, 0.035)
-          .to(signal, { autoAlpha: 0, scaleX: 0.62, duration: 0.12, ease: 'power1.in' }, 0.135);
-      }
-      timeline.to(wrapper, {
-        x: isReducedMotion ? 0 : exitX,
-        scale: isReducedMotion ? 1 : 0.988,
-        autoAlpha: 0,
-        duration: isReducedMotion ? 0.08 : 0.14,
-        ease: isReducedMotion ? 'none' : 'power2.in'
-      }, isReducedMotion ? 0 : 0.035);
-    });
-  }
-
-  if (token !== routeShiftToken) return;
-
-  currentView.value = view;
-  await nextTick();
-  const nextWrapper = pageMotionRef.value;
-  if (!nextWrapper || token !== routeShiftToken) return;
-
-  await playRouteTimeline((timeline) => {
-    timeline.fromTo(nextWrapper,
-      {
-        x: isReducedMotion ? 0 : enterX,
-        scale: isReducedMotion ? 1 : 0.992,
-        autoAlpha: 0,
-        willChange: 'transform,opacity'
-      },
-      {
-        x: 0,
-        scale: 1,
-        autoAlpha: 1,
-        duration: isReducedMotion ? 0.1 : (isMobile ? 0.18 : 0.2),
-        ease: isReducedMotion ? 'none' : 'power2.out',
-        clearProps: 'transform,opacity,visibility,willChange'
-      }
-    );
-  });
-
-  if (token !== routeShiftToken) return;
-  if (signal) {
-    gsap.set(signal, { clearProps: 'transform,opacity,visibility,willChange' });
-    resetRouteShiftStyles(signal);
-  }
-  resetRouteShiftStyles(nextWrapper);
-  await finishViewEnter(token);
+  isViewTransitioning.value = true;
+  pageVisible.value = false;
 }
 
 async function switchView(view: View) {
-  if (view === navigationView.value && !isViewTransitioning.value) return;
-
-  navigationView.value = view;
-  const token = ++routeShiftToken;
-  clearRouteShiftTargets();
-  isViewTransitioning.value = true;
+  requestedView.value = view;
   await updateNavIndicator();
-  if (token !== routeShiftToken) return;
-  void runRouteShift(view, token);
+
+  if (prefersReducedMotion.matches) {
+    pendingView.value = null;
+    displayedView.value = view;
+    pageVisible.value = true;
+    isViewTransitioning.value = false;
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    await nextTick();
+    window.dispatchEvent(new CustomEvent('gearflow:page-entered', { detail: { view } }));
+    return;
+  }
+
+  if (view === displayedView.value && !isViewTransitioning.value) return;
+
+  pendingView.value = view;
+  if (!isViewTransitioning.value) beginPendingTransition();
+}
+
+function onBeforePageLeave() {
+  if (prefersReducedMotion.matches) return;
+  positionRouteSignal();
+  routeSignal.active = true;
+}
+
+async function onAfterPageLeave() {
+  routeSignal.active = false;
+  displayedView.value = pendingView.value || requestedView.value;
+  pendingView.value = null;
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  await nextTick();
+  pageVisible.value = true;
+}
+
+async function onAfterPageEnter() {
+  if (!animatedViews.value.includes(displayedView.value)) {
+    animatedViews.value.push(displayedView.value);
+  }
+  window.dispatchEvent(new CustomEvent('gearflow:page-entered', { detail: { view: displayedView.value } }));
+
+  if (pendingView.value && pendingView.value !== displayedView.value) {
+    beginPendingTransition();
+    return;
+  }
+
+  pendingView.value = null;
+  requestedView.value = displayedView.value;
+  isViewTransitioning.value = false;
+  await updateNavIndicator();
 }
 
 function handlePrimaryAction() {
@@ -858,9 +824,6 @@ async function deleteMaintenance(id: string, title = 'service') {
 }
 
 onMounted(async () => {
-  if (appShellRef.value) {
-    routeShiftContext = gsap.context(() => {}, appShellRef.value);
-  }
   await updateNavIndicator();
   window.addEventListener('resize', updateNavIndicator);
   if (typeof document !== 'undefined' && 'fonts' in document) {
@@ -885,25 +848,23 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  routeShiftToken += 1;
-  clearRouteShiftTargets();
-  routeShiftContext?.revert();
-  routeShiftContext = null;
   window.removeEventListener('resize', updateNavIndicator);
 });
 </script>
 
 <template>
-  <WavyCubesBackground />
-  <main v-if="!user" class="auth-screen">
+  <DashboardWavyCubes />
+  <Transition name="auth-field" mode="out-in">
+  <main v-if="!user" key="auth" class="auth-screen">
     <section class="auth-panel">
       <div class="auth-intro">
         <div class="brand-lockup">
           <span class="chain-mark"></span>
           <p>GearFlow</p>
         </div>
-        <h1>Operate the garage behind every ride.</h1>
-        <p>Log rides, watch asset value, and keep service work visible before it becomes a problem.</p>
+        <p class="auth-eyebrow">Garage access</p>
+        <h1>Start from the garage.</h1>
+        <p>Keep rides, equipment, and service work in one operating field.</p>
       </div>
       <form class="auth-form" @submit.prevent="authenticate">
         <div class="segmented">
@@ -922,13 +883,14 @@ onBeforeUnmount(() => {
           Password
           <input v-model="authForm.password" type="password" required minlength="6" />
         </label>
+        <p v-if="authMode === 'login'" class="auth-demo">Demo access is prefilled: <b>demo@gearflow.app</b></p>
         <p v-if="error" class="error">{{ error }}</p>
         <button class="primary" :disabled="loading">{{ loading ? 'Working...' : authMode === 'login' ? 'Login' : 'Create account' }}</button>
       </form>
     </section>
   </main>
 
-  <main v-else ref="appShellRef" class="app-shell">
+  <main v-else key="app" class="app-shell">
     <aside class="sidebar">
       <div class="brand-lockup">
         <span class="chain-mark"></span>
@@ -952,12 +914,19 @@ onBeforeUnmount(() => {
       </div>
     </aside>
 
-    <span ref="routeSignalRef" class="route-signal-line" aria-hidden="true"></span>
+    <span
+      ref="routeSignalRef"
+      class="route-signal-line"
+      :class="{ 'route-signal-line--active': routeSignal.active }"
+      :style="{ '--route-signal-x': routeSignal.x, '--route-signal-y': routeSignal.y, '--route-signal-width': routeSignal.width }"
+      aria-hidden="true"
+    ></span>
 
     <section class="workspace">
       <div class="page-viewport">
-        <div ref="pageMotionRef" :key="currentView" class="page-content page-motion-wrapper" :class="[`page-view-${currentView}`, { 'page-view-fresh': !animatedViews.includes(currentView) }]">
-          <header class="page-header">
+        <Transition name="route-field" mode="out-in" @before-leave="onBeforePageLeave" @after-leave="onAfterPageLeave" @after-enter="onAfterPageEnter">
+          <div v-if="pageVisible" ref="pageMotionRef" :key="displayedView" class="page-content page-motion-wrapper" :class="[`page-view-${displayedView}`, { 'page-view-fresh': !animatedViews.includes(displayedView) }]">
+          <header class="page-header page-identity-layer">
             <div>
               <p class="eyebrow">Cycling operations</p>
               <h1>{{ activePage.title }}</h1>
@@ -969,6 +938,7 @@ onBeforeUnmount(() => {
             </div>
           </header>
 
+          <div class="page-content-layer">
           <div class="status-stack">
             <p v-if="error" class="error wide">{{ error }}</p>
             <p v-if="notice" class="notice action-notice">{{ notice }}</p>
@@ -976,6 +946,7 @@ onBeforeUnmount(() => {
           </div>
 
           <section v-if="currentView === 'dashboard'" class="dashboard-layout">
+            <div class="dashboard-content-layer">
             <article class="hero-panel dashboard-hero-panel glass-surface glass-surface--elevated">
               <img :src="dashboardHeroUrl" alt="User's Merida road bike overlooking the city and hills" class="hero-image" />
               <div class="image-overlay dashboard-overlay"></div>
@@ -1066,6 +1037,7 @@ onBeforeUnmount(() => {
                 </div>
               </article>
             </section>
+            </div>
           </section>
 
           <RidePlannerPage v-if="currentView === 'ride-planner'" />
@@ -1325,8 +1297,11 @@ onBeforeUnmount(() => {
               </article>
             </section>
           </section>
-        </div>
+          </div>
+          </div>
+        </Transition>
       </div>
     </section>
   </main>
+  </Transition>
 </template>

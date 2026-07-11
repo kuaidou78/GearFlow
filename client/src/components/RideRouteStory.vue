@@ -286,6 +286,16 @@ function resizeStory() {
   }, 120);
 }
 
+function refreshAfterPageEnter(event: Event) {
+  const detail = (event as CustomEvent<{ view?: string }>).detail;
+  if (detail?.view !== 'ride-planner' || !storyMap) return;
+  requestAnimationFrame(() => {
+    storyMap?.invalidateSize({ animate: false });
+    projectRoute();
+    ScrollTrigger.refresh();
+  });
+}
+
 function initializeMap() {
   if (!mapEl.value || !routeAvailable.value) return;
   try {
@@ -379,10 +389,12 @@ async function initializeStory() {
 watch(() => props.plan, initializeStory);
 onMounted(() => {
   document.addEventListener('keydown', onEscape);
+  window.addEventListener('gearflow:page-entered', refreshAfterPageEnter);
   initializeStory();
 });
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onEscape);
+  window.removeEventListener('gearflow:page-entered', refreshAfterPageEnter);
   closeExpandedMap();
   clearStory();
 });

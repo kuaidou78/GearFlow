@@ -59,9 +59,9 @@ GearFlow/
 ### Install and configure
 
 ```bash
-npm install
-npm install --prefix server
-npm install --prefix client
+npm ci
+npm ci --prefix server
+npm ci --prefix client
 ```
 
 Copy the example environment file, then replace its placeholders:
@@ -70,7 +70,7 @@ Copy the example environment file, then replace its placeholders:
 Copy-Item server/.env.example server/.env
 ```
 
-Required values are documented in [`server/.env.example`](server/.env.example). The running app uses `SESSION_SECRET`; `JWT_SECRET` is an explicit placeholder for deployment compatibility and is not consumed by the current cookie-session implementation.
+Required values are documented in [`server/.env.example`](server/.env.example). `DATABASE_URL` is required for Prisma and the database-backed API; `ORS_API_KEY` is required for place search and route generation. The running app uses `SESSION_SECRET`; `JWT_SECRET` is an explicit placeholder for deployment compatibility and is not consumed by the current cookie-session implementation.
 
 Create a local database and a least-privilege MySQL user, then set `DATABASE_URL` in `server/.env`. For example:
 
@@ -91,6 +91,8 @@ npm run db:migrate
 npm run db:seed
 ```
 
+`prisma` is a development dependency, so production installs that omit development dependencies do not provide the Prisma CLI. Generate Prisma Client during the build or release stage where development dependencies are installed, then deploy the generated application artifacts.
+
 Start both services:
 
 ```bash
@@ -105,10 +107,11 @@ Useful checks:
 
 ```bash
 npm run build
+npm test --prefix server
 npm run ui:smoke
 ```
 
-`ui:smoke` expects the local app to be available. The build command generates Prisma Client and builds the Vue application.
+`ui:smoke` expects the local app to be available. Run `npm run prisma:generate --prefix server` before tests, migrations, seeding, or any server command that imports Prisma Client. The build command generates Prisma Client and builds the Vue application.
 
 ## Environment variables
 
@@ -116,6 +119,8 @@ npm run ui:smoke
 | --- | --- |
 | `DATABASE_URL` | MySQL Prisma connection URL |
 | `PORT` | Express listening port; defaults to `3001` |
+| `HOST` | API bind address; use `127.0.0.1` behind production Nginx |
+| `CORS_ORIGIN` | Allowed browser origin for credentialed API requests |
 | `SESSION_SECRET` | Secret used by the current HTTP-only cookie session |
 | `JWT_SECRET` | Reserved placeholder; not read by the current application |
 | `ORS_API_KEY` | OpenRouteService key for place search and route generation |

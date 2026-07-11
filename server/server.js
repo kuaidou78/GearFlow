@@ -18,8 +18,10 @@ import { requireAuth } from './middleware/requireAuth.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
+const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
+const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -41,6 +43,6 @@ app.use((req, res) => {
 
 app.use(errorHandler);
 
-app.listen(port, () => {
-  console.log(`GearFlow API listening on http://localhost:${port}`);
+app.listen(port, host, () => {
+  console.log(`GearFlow API listening on http://${host}:${port}`);
 });
