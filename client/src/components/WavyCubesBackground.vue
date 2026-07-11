@@ -1,60 +1,52 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import wavyCubesVertex from '../shaders/wavyCubesVertex';
+import wavyCubesFragment from '../shaders/wavyCubesFragment';
 
 const rootEl = ref<HTMLElement | null>(null);
 const ready = ref(false);
 const failed = ref(false);
 
+const TRAIL_SAMPLES = 24;
 const COLORS = {
-  sceneBackground: '#080A08',
-  cubeBase: '#292C25',
-  cubeShadow: '#151713',
-  waveMid: '#756F45',
+  scene: '#080A08',
+  cubeBase: '#46493F',
+  waveMid: '#8A7B3F',
   waveHighlight: '#D8C568',
-  peakSpecular: '#EEE1A1',
-  ambientLight: '#6C6D60',
-  directionalLight: '#F1E7C5'
+  peakHighlight: '#F0D98A'
 };
 
 type TrailPoint = { x: number; z: number; age: number; strength: number };
 
-let renderer: any = null;
 let THREE: any = null;
+let renderer: any = null;
 let scene: any = null;
 let camera: any = null;
 let grid: any = null;
 let geometry: any = null;
 let material: any = null;
+let trailTexture: any = null;
 let rafId = 0;
 let lastFrame = 0;
-let dynamicEnabled = false;
 let visible = true;
+let dynamicEnabled = false;
 let trail: TrailPoint[] = [];
-let heights = new Float32Array();
-let offsets = new Float32Array();
-let gridColumns = 0;
-let gridRows = 0;
+let trailData: Float32Array | null = null;
+let offsets: Float32Array | null = null;
 let gridWidth = 0;
 let gridDepth = 0;
+let raycaster: any = null;
+let pointerNdc: any = null;
+let pointerWorld: any = null;
+let groundPlane: any = null;
 
-let dummy: any;
-let raycaster: any;
-let pointerNdc: any;
-let pointerWorld: any;
-let groundPlane: any;
-let baseColor: any;
-let midColor: any;
-let highlightColor: any;
-let specularColor: any;
-let mixedColor: any;
-
-function viewportGrid() {
-  if (window.innerWidth < 768) return { columns: 20, rows: 13, dynamic: false, maxHeight: 0.22 };
-  if (window.innerWidth < 1100) return { columns: 28, rows: 18, dynamic: true, maxHeight: 0.42 };
-  return { columns: 36, rows: 22, dynamic: true, maxHeight: 0.52 };
+function gridSettings() {
+  if (window.innerWidth < 768) return { columns: 26, rows: 18, dynamic: false, waveHeight: 0.2 };
+  if (window.innerWidth < 1100) return { columns: 38, rows: 26, dynamic: true, waveHeight: 0.32 };
+  return { columns: 52, rows: 34, dynamic: true, waveHeight: 0.4 };
 }
 
-function prefersReducedMotion() {
+function reducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
@@ -62,138 +54,134 @@ function disposeGrid() {
   if (grid && scene) scene.remove(grid);
   geometry?.dispose();
   material?.dispose();
+  trailTexture?.dispose();
   grid = null;
   geometry = null;
   material = null;
+  trailTexture = null;
+  trailData = null;
+  offsets = null;
 }
 
 function buildGrid() {
-  if (!scene) return;
+  if (!scene || !THREE) return;
   disposeGrid();
-  const settings = viewportGrid();
-  gridColumns = settings.columns;
-  gridRows = settings.rows;
-  dynamicEnabled = settings.dynamic && !prefersReducedMotion();
-
-  const count = gridColumns * gridRows;
-  const cubeSize = 0.48;
-  const spacing = 0.62;
-  const baseHeight = 0.34;
-  const xOffset = ((gridColumns - 1) * spacing) / 2;
-  const zOffset = ((gridRows - 1) * spacing) / 2;
-  gridWidth = gridColumns * spacing;
-  gridDepth = gridRows * spacing;
-  heights = new Float32Array(count);
+  const settings = gridSettings();
+  dynamicEnabled = settings.dynamic && !reducedMotion();
+  const count = settings.columns * settings.rows;
+  const cubeSize = window.innerWidth < 768 ? 0.28 : 0.3;
+  const gap = 0.018;
+  const spacing = cubeSize + gap;
+  const baseHeight = 0.26;
+  const xOffset = ((settings.columns - 1) * spacing) / 2;
+  const zOffset = ((settings.rows - 1) * spacing) / 2;
+  gridWidth = settings.columns * spacing;
+  gridDepth = settings.rows * spacing;
   offsets = new Float32Array(count * 2);
+  trailData = new Float32Array(TRAIL_SAMPLES * 4);
+  trailTexture = new THREE.DataTexture(trailData, TRAIL_SAMPLES, 1, THREE.RGBAFormat, THREE.FloatType);
+  trailTexture.needsUpdate = true;
+  trailTexture.magFilter = THREE.NearestFilter;
+  trailTexture.minFilter = THREE.NearestFilter;
+  trailTexture.generateMipmaps = false;
+
   geometry = new THREE.BoxGeometry(cubeSize, baseHeight, cubeSize);
-  material = new THREE.MeshStandardMaterial({
-    color: COLORS.cubeBase,
-    roughness: 0.82,
-    metalness: 0.14,
-    vertexColors: true
+  const offsetAttribute = new THREE.InstancedBufferAttribute(offsets, 2);
+  geometry.setAttribute('aOffset', offsetAttribute);
+  material = new THREE.ShaderMaterial({
+    vertexShader: wavyCubesVertex,
+    fragmentShader: wavyCubesFragment,
+    uniforms: {
+      uTrailTexture: { value: trailTexture },
+      uTrailCount: { value: 0 },
+      uTrailLifetime: { value: 1.15 },
+      uWaveRadius: { value: window.innerWidth < 1100 ? 1.55 : 1.8 },
+      uWaveHeight: { value: settings.waveHeight },
+      uCubeBase: { value: new THREE.Color(COLORS.cubeBase) },
+      uWaveMid: { value: new THREE.Color(COLORS.waveMid) },
+      uWaveHighlight: { value: new THREE.Color(COLORS.waveHighlight) },
+      uPeakHighlight: { value: new THREE.Color(COLORS.peakHighlight) }
+    }
   });
   grid = new THREE.InstancedMesh(geometry, material, count);
-  grid.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  grid.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
   grid.frustumCulled = false;
-
-  for (let row = 0; row < gridRows; row += 1) {
-    for (let column = 0; column < gridColumns; column += 1) {
-      const index = row * gridColumns + column;
+  const dummy = new THREE.Object3D();
+  for (let row = 0; row < settings.rows; row += 1) {
+    for (let column = 0; column < settings.columns; column += 1) {
+      const index = row * settings.columns + column;
       const x = column * spacing - xOffset;
       const z = row * spacing - zOffset;
       offsets[index * 2] = x;
       offsets[index * 2 + 1] = z;
       dummy.position.set(x, baseHeight / 2, z);
-      dummy.scale.set(1, 1, 1);
       dummy.updateMatrix();
       grid.setMatrixAt(index, dummy.matrix);
-      grid.setColorAt(index, baseColor);
     }
   }
   grid.instanceMatrix.needsUpdate = true;
-  if (grid.instanceColor) grid.instanceColor.needsUpdate = true;
-  grid.userData = { baseHeight, maxHeight: settings.maxHeight };
+  offsetAttribute.needsUpdate = true;
   scene.add(grid);
 }
 
-function addTrailPoint(x: number, z: number) {
-  const last = trail[trail.length - 1];
-  const distance = last ? Math.hypot(last.x - x, last.z - z) : Infinity;
-  if (distance < 0.16) return;
-  trail.push({ x, z, age: 0, strength: Math.min(1, distance / 0.7) });
-  if (trail.length > 14) trail.shift();
+function uploadTrail() {
+  if (!trailData || !trailTexture || !material) return;
+  const data = trailData;
+  data.fill(0);
+  const visiblePoints = trail.slice(-TRAIL_SAMPLES);
+  visiblePoints.forEach((point, index) => {
+    const offset = index * 4;
+    data[offset] = point.x;
+    data[offset + 1] = point.z;
+    data[offset + 2] = point.age;
+    data[offset + 3] = point.strength;
+  });
+  trailTexture.needsUpdate = true;
+  material.uniforms.uTrailCount.value = visiblePoints.length;
 }
 
-function handlePointerMove(event: PointerEvent) {
+function addTrailPoint(x: number, z: number) {
+  const previous = trail[trail.length - 1];
+  const distance = previous ? Math.hypot(x - previous.x, z - previous.z) : 0.3;
+  if (previous && distance < 0.075) return;
+  trail.push({ x, z, age: 0, strength: Math.min(1, Math.max(0.38, distance / 0.42)) });
+  if (trail.length > TRAIL_SAMPLES) trail.shift();
+  uploadTrail();
+  startRendering();
+}
+
+function onPointerMove(event: PointerEvent) {
   if (!dynamicEnabled || !camera) return;
   pointerNdc.set((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(pointerNdc, camera);
   if (!raycaster.ray.intersectPlane(groundPlane, pointerWorld)) return;
-  if (Math.abs(pointerWorld.x) > gridWidth * 0.62 || Math.abs(pointerWorld.z) > gridDepth * 0.62) return;
+  if (Math.abs(pointerWorld.x) > gridWidth * 0.58 || Math.abs(pointerWorld.z) > gridDepth * 0.58) return;
   addTrailPoint(pointerWorld.x, pointerWorld.z);
 }
 
-function handlePointerLeave() {
-  // Existing points fade naturally; no new point is added after pointer exit.
+function onPointerExit() {
+  // The data texture decays in the animation loop; no synthetic points are added.
 }
 
-function updateGrid(delta: number) {
-  if (!grid) return;
-  const baseHeight = grid.userData.baseHeight as number;
-  const maxHeight = grid.userData.maxHeight as number;
-  const radius = window.innerWidth < 1100 ? 2.05 : 2.55;
-  const trailLifetime = window.innerWidth < 1100 ? 0.72 : 0.92;
-  const rise = 1 - Math.exp(-delta * 15);
-  const settle = 1 - Math.exp(-delta * 8);
-
-  for (let pointIndex = trail.length - 1; pointIndex >= 0; pointIndex -= 1) {
-    trail[pointIndex].age += delta;
-    if (trail[pointIndex].age > trailLifetime) trail.splice(pointIndex, 1);
+function updateTrail(delta: number) {
+  if (!trail.length) return;
+  const lifetime = material?.uniforms.uTrailLifetime.value || 1.15;
+  let changed = false;
+  for (let index = trail.length - 1; index >= 0; index -= 1) {
+    trail[index].age += delta;
+    if (trail[index].age > lifetime) trail.splice(index, 1);
+    changed = true;
   }
-
-  for (let index = 0; index < heights.length; index += 1) {
-    const x = offsets[index * 2];
-    const z = offsets[index * 2 + 1];
-    let target = 0;
-    for (let pointIndex = 0; pointIndex < trail.length; pointIndex += 1) {
-      const point = trail[pointIndex];
-      const normalizedDistance = Math.hypot(x - point.x, z - point.z) / radius;
-      if (normalizedDistance >= 1) continue;
-      const falloff = 1 - normalizedDistance;
-      const smoothFalloff = falloff * falloff * (3 - 2 * falloff);
-      const fade = 1 - point.age / trailLifetime;
-      const shortRipple = 0.88 + Math.cos(normalizedDistance * 5.8 - point.age * 7.5) * 0.12;
-      target = Math.max(target, smoothFalloff * fade * shortRipple * maxHeight * point.strength);
-    }
-
-    const easing = target > heights[index] ? rise : settle;
-    heights[index] += (target - heights[index]) * easing;
-    if (Math.abs(heights[index]) < 0.0005) heights[index] = 0;
-
-    const normalizedHeight = Math.min(1, heights[index] / maxHeight);
-    if (normalizedHeight < 0.58) mixedColor.lerpColors(baseColor, midColor, normalizedHeight / 0.58);
-    else if (normalizedHeight < 0.92) mixedColor.lerpColors(midColor, highlightColor, (normalizedHeight - 0.58) / 0.34);
-    else mixedColor.lerpColors(highlightColor, specularColor, (normalizedHeight - 0.92) / 0.08);
-
-    const scaleY = 1 + heights[index] / baseHeight;
-    dummy.position.set(x, (baseHeight * scaleY) / 2, z);
-    dummy.scale.set(1, scaleY, 1);
-    dummy.updateMatrix();
-    grid.setMatrixAt(index, dummy.matrix);
-    grid.setColorAt(index, mixedColor);
-  }
-  grid.instanceMatrix.needsUpdate = true;
-  if (grid.instanceColor) grid.instanceColor.needsUpdate = true;
+  if (changed) uploadTrail();
 }
 
 function renderFrame(timestamp: number) {
   if (!renderer || !scene || !camera || !visible) return;
   const delta = Math.min((timestamp - lastFrame) / 1000, 0.05);
   lastFrame = timestamp;
-  if (dynamicEnabled) updateGrid(delta);
+  updateTrail(delta);
   renderer.render(scene, camera);
-  if (dynamicEnabled || trail.length) rafId = window.requestAnimationFrame(renderFrame);
+  if (trail.length) rafId = window.requestAnimationFrame(renderFrame);
+  else rafId = 0;
 }
 
 function startRendering() {
@@ -209,24 +197,23 @@ function stopRendering() {
 }
 
 function resize() {
-  if (!renderer || !camera || !rootEl.value) return;
+  if (!renderer || !camera) return;
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, window.innerWidth < 768 ? 1 : 1.5));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   trail = [];
   buildGrid();
-  renderer.render(scene!, camera);
-  if (dynamicEnabled) startRendering();
+  renderer.render(scene, camera);
 }
 
-function handleVisibilityChange() {
+function onVisibilityChange() {
   visible = document.visibilityState === 'visible';
-  if (visible) startRendering();
-  else stopRendering();
+  if (visible && trail.length) startRendering();
+  else if (!visible) stopRendering();
 }
 
-function handleContextLost(event: Event) {
+function onContextLost(event: Event) {
   event.preventDefault();
   failed.value = true;
   dispose();
@@ -236,41 +223,29 @@ async function initialize() {
   if (!rootEl.value) return;
   try {
     THREE = await import('three');
-    dummy = new THREE.Object3D();
     raycaster = new THREE.Raycaster();
     pointerNdc = new THREE.Vector2();
     pointerWorld = new THREE.Vector3();
     groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    baseColor = new THREE.Color(COLORS.cubeBase);
-    midColor = new THREE.Color(COLORS.waveMid);
-    highlightColor = new THREE.Color(COLORS.waveHighlight);
-    specularColor = new THREE.Color(COLORS.peakSpecular);
-    mixedColor = new THREE.Color();
     renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false, powerPreference: 'low-power' });
-    renderer.setClearColor(COLORS.sceneBackground, 0);
+    renderer.setClearColor(COLORS.scene, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.domElement.setAttribute('aria-hidden', 'true');
-    renderer.domElement.addEventListener('webglcontextlost', handleContextLost, false);
+    renderer.domElement.addEventListener('webglcontextlost', onContextLost, false);
     rootEl.value.appendChild(renderer.domElement);
     scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(COLORS.sceneBackground, 0.045);
-    camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 80);
-    camera.position.set(0, 8.5, 11.8);
-    camera.lookAt(0, 0, 0.6);
-    scene.add(new THREE.HemisphereLight(COLORS.ambientLight, COLORS.cubeShadow, 1.45));
-    const keyLight = new THREE.DirectionalLight(COLORS.directionalLight, 1.7);
-    keyLight.position.set(-8, 12, 7);
-    scene.add(keyLight);
+    camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 80);
+    camera.position.set(0, 8.6, 10.8);
+    camera.lookAt(0, 0, 0.3);
     buildGrid();
     resize();
     renderer.render(scene, camera);
     ready.value = true;
-    window.addEventListener('pointermove', handlePointerMove, { passive: true });
-    window.addEventListener('pointerleave', handlePointerLeave, { passive: true });
-    window.addEventListener('blur', handlePointerLeave);
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerleave', onPointerExit, { passive: true });
+    window.addEventListener('blur', onPointerExit);
     window.addEventListener('resize', resize, { passive: true });
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    if (dynamicEnabled) startRendering();
+    document.addEventListener('visibilitychange', onVisibilityChange);
   } catch (_error) {
     failed.value = true;
     dispose();
@@ -279,12 +254,12 @@ async function initialize() {
 
 function dispose() {
   stopRendering();
-  window.removeEventListener('pointermove', handlePointerMove);
-  window.removeEventListener('pointerleave', handlePointerLeave);
-  window.removeEventListener('blur', handlePointerLeave);
+  window.removeEventListener('pointermove', onPointerMove);
+  window.removeEventListener('pointerleave', onPointerExit);
+  window.removeEventListener('blur', onPointerExit);
   window.removeEventListener('resize', resize);
-  document.removeEventListener('visibilitychange', handleVisibilityChange);
-  renderer?.domElement.removeEventListener('webglcontextlost', handleContextLost);
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+  renderer?.domElement.removeEventListener('webglcontextlost', onContextLost);
   disposeGrid();
   renderer?.dispose();
   renderer?.forceContextLoss();
